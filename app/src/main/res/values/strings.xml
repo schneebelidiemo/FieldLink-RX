@@ -2,9 +2,9 @@
 <resources>
     <string name="app_name">FieldLink RX</string>
     <string name="session_title">Start receiver</string>
-    <string name="session_explanation">Enter the FieldLink group password. It is required before reception and is never stored.</string>
-    <string name="password_label">Group password</string>
-    <string name="password_minimum">At least 16 characters</string>
+    <string name="session_explanation">Choose one decoder and an audio input. A password is only used for encrypted FieldLink Fast or Wide messages and is never stored.</string>
+    <string name="password_label">FieldLink password (optional)</string>
+    <string name="password_minimum">Leave empty for unencrypted FieldLink; otherwise enter at least 16 characters</string>
     <string name="start_reception">Start reception</string>
     <string name="stop_reception">Stop reception</string>
     <string name="new_session">New session</string>
@@ -32,6 +32,19 @@
     <string name="signal_level">Level</string>
     <string name="audio_frequency">Audio frequency</string>
     <string name="decoder_status">Decoder status</string>
+    <string name="audio_capture_info">Audio: %1$d Hz · %2$s · %3$s</string>
+    <string name="audio_device_unknown">route not reported</string>
+    <string name="audio_source_unprocessed">unprocessed</string>
+    <string name="audio_source_voice_recognition">voice recognition</string>
+    <string name="audio_source_microphone">microphone</string>
+    <string name="audio_source_other">other source</string>
+    <string name="decoder_waiting_fieldlink">Waiting for the FieldLink preamble</string>
+    <string name="decoder_preamble">Preamble candidate: %1$d/%2$d symbols</string>
+    <string name="decoder_frame">Packet detected; checking FEC and CRC</string>
+    <string name="decoder_success">FieldLink message decoded successfully</string>
+    <string name="decoder_encrypted">Encrypted FieldLink message detected</string>
+    <string name="decoder_damaged">FieldLink signal detected, but decoding failed</string>
+    <string name="decoder_damaged_detail">FieldLink signal detected, but decoding failed: %1$s</string>
     <string name="messages">Messages</string>
     <string name="no_messages">No decoded messages yet</string>
     <string name="uncertain">Uncertain</string>

@@ -26,7 +26,12 @@ class DecoderCoordinator(
 
     private fun decoderFor(mode: DecodeMode, password: CharArray): AudioDecoder = when (mode) {
         DecodeMode.FIELDLINK_FAST,
-        DecodeMode.FIELDLINK_WIDE -> FieldLinkStreamDecoder(password.copyOf(), mode, onMessage)
+        DecodeMode.FIELDLINK_WIDE -> FieldLinkStreamDecoder(
+            password = password.copyOf(),
+            selectedMode = mode,
+            emit = onMessage,
+            diagnostic = ReceiverRuntime::decoderDiagnostic,
+        )
 
         DecodeMode.CW -> CwDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
         DecodeMode.RTTY -> RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }

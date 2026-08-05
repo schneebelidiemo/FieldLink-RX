@@ -62,8 +62,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ch.fieldlink.rx.R
 import ch.fieldlink.rx.model.AudioInput
+import ch.fieldlink.rx.model.AudioCaptureSource
 import ch.fieldlink.rx.model.Coordinates
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.DecoderDiagnostic
+import ch.fieldlink.rx.model.DecoderStage
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
 import ch.fieldlink.rx.model.ReceiverState
@@ -134,6 +137,8 @@ private fun SetupScreen(
     var menuOpen by remember { mutableStateOf(false) }
     var modeMenuOpen by remember { mutableStateOf(false) }
     val selected = state.inputs.firstOrNull { it.id == state.selectedInputId }
+    val fieldLinkSelected = state.selectedMode.isFieldLink()
+    val passwordValid = !fieldLinkSelected || password.isEmpty() || password.length >= 16
 
     LaunchedEffect(Unit) { onRefreshInputs() }
 
@@ -164,21 +169,24 @@ private fun SetupScreen(
             }
         }
 
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(stringResource(R.string.password_label)) },
-            supportingText = { Text(stringResource(R.string.password_minimum)) },
-            singleLine = true,
-            visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            trailingIcon = {
-                OutlinedButton(onClick = { showPassword = !showPassword }) {
-                    Text(stringResource(if (showPassword) R.string.password_hide else R.string.password_show))
-                }
-            },
-        )
+        if (fieldLinkSelected) {
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.password_label)) },
+                supportingText = { Text(stringResource(R.string.password_minimum)) },
+                isError = !passwordValid,
+                singleLine = true,
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                trailingIcon = {
+                    OutlinedButton(onClick = { showPassword = !showPassword }) {
+                        Text(stringResource(if (showPassword) R.string.password_hide else R.string.password_show))
+                    }
+                },
+            )
+        }
 
         Text(stringResource(R.string.choose_audio_input), style = MaterialTheme.typography.titleMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -207,10 +215,12 @@ private fun SetupScreen(
         Spacer(Modifier.weight(1f))
         Button(
             onClick = {
-                state.selectedMode?.let { mode -> onStart(password, state.selectedInputId, mode) }
+                state.selectedMode?.let { mode ->
+                    onStart(if (mode.isFieldLink()) password else "", state.selectedInputId, mode)
+                }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = password.length >= 16 && state.selectedInputId != null && state.selectedMode != null,
+            enabled = passwordValid && state.selectedInputId != null && state.selectedMode != null,
         ) {
             Text(stringResource(R.string.start_reception))
         }
@@ -268,6 +278,23 @@ private fun ReceiverOverview(
                         (state.selectedMode?.let { modeLabel(it) } ?: stringResource(R.string.decoder_not_selected)),
                     style = MaterialTheme.typography.bodySmall,
                 )
+                state.captureInfo?.let { info ->
+                    Text(
+                        stringResource(
+                            R.string.audio_capture_info,
+                            info.sampleRateHz,
+                            captureSourceLabel(info.source),
+                            info.routedDevice.ifBlank { stringResource(R.string.audio_device_unknown) },
+                        ),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                if (state.selectedMode.isFieldLink()) {
+                    Text(
+                        "${stringResource(R.string.decoder_status)}: ${diagnosticText(state.decoderDiagnostic)}",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
@@ -361,6 +388,35 @@ private fun phaseText(phase: ReceiverPhase): String = when (phase) {
     ReceiverPhase.LISTENING -> stringResource(R.string.reception_active)
     ReceiverPhase.ERROR -> stringResource(R.string.service_error)
     else -> stringResource(R.string.reception_stopped)
+}
+
+private fun DecodeMode?.isFieldLink(): Boolean =
+    this == DecodeMode.FIELDLINK_FAST || this == DecodeMode.FIELDLINK_WIDE
+
+@Composable
+private fun captureSourceLabel(source: AudioCaptureSource): String = stringResource(
+    when (source) {
+        AudioCaptureSource.UNPROCESSED -> R.string.audio_source_unprocessed
+        AudioCaptureSource.VOICE_RECOGNITION -> R.string.audio_source_voice_recognition
+        AudioCaptureSource.MICROPHONE -> R.string.audio_source_microphone
+        AudioCaptureSource.OTHER -> R.string.audio_source_other
+    },
+)
+
+@Composable
+private fun diagnosticText(diagnostic: DecoderDiagnostic): String = when (diagnostic.stage) {
+    DecoderStage.WAITING -> stringResource(R.string.decoder_waiting_fieldlink)
+    DecoderStage.PREAMBLE -> stringResource(
+        R.string.decoder_preamble,
+        diagnostic.preambleMatches ?: 0,
+        32,
+    )
+    DecoderStage.FRAME -> stringResource(R.string.decoder_frame)
+    DecoderStage.SUCCESS -> stringResource(R.string.decoder_success)
+    DecoderStage.ENCRYPTED -> stringResource(R.string.decoder_encrypted)
+    DecoderStage.DAMAGED -> diagnostic.detail?.let {
+        stringResource(R.string.decoder_damaged_detail, it)
+    } ?: stringResource(R.string.decoder_damaged)
 }
 
 @Composable

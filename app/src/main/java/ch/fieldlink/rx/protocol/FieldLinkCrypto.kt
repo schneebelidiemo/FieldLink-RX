@@ -55,7 +55,7 @@ object FieldLinkCrypto {
         if (cipher == FieldLinkCipher.NONE) {
             return OpenedEnvelope(cipher, compressed, ciphertext)
         }
-        require(password.size >= 16) { "The group password must contain at least 16 characters." }
+        if (password.size < 16) throw EncryptedFieldLinkMessageException()
 
         val key = deriveKey(password, salt)
         return try {
@@ -143,4 +143,3 @@ object FieldLinkCrypto {
         return output.copyOf(length)
     }
 }
-

@@ -19,7 +19,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.3.1 |
+| Mode | Status in 0.3.2 |
 | --- | --- |
 | FieldLink Fast/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Live adaptive decoder, results include confidence |
@@ -34,8 +34,10 @@ and over-the-air audio on an Android phone.
 Exactly one decoder is selected manually before reception. FieldLink Fast and FieldLink Wide are
 separate choices, as are CW, RTTY, PSK31, PSK63, FT8, FT4 and JS8Call. This prevents unrelated
 decoders from consuming CPU or influencing the selected mode's live processing. The FieldLink
-preamble threshold matches the desktop transmitter and an encrypted desktop-compatible audio
-round-trip is covered by the Android unit tests.
+preamble synchronizer checks eight timing phases and reports its live stage in the UI. Encrypted,
+unencrypted and missing-password desktop-compatible audio round-trips are covered by Android unit
+tests. The password field is shown only for FieldLink Fast/Wide and may be left empty for cleartext
+reception; all other decoders always receive without a password.
 
 ## Build
 
@@ -52,7 +54,7 @@ then uploads an ARM64 debug APK as `FieldLink-RX-Android-14`.
 
 ## Privacy
 
-The group password is held only in process memory and cleared when reception stops. Decoded
+An entered FieldLink group password is held only in process memory and cleared when reception stops. Decoded
 messages are not written to disk. Sharing a message or opening coordinates in Google Maps is an
 explicit user action and leaves FieldLink RX.
 

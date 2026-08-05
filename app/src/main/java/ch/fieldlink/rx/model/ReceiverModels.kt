@@ -61,6 +61,34 @@ data class SignalSnapshot(
     val peakDb: Float = -120f,
 )
 
+data class AudioCaptureInfo(
+    val sampleRateHz: Int,
+    val source: AudioCaptureSource,
+    val routedDevice: String,
+)
+
+enum class AudioCaptureSource {
+    UNPROCESSED,
+    VOICE_RECOGNITION,
+    MICROPHONE,
+    OTHER,
+}
+
+enum class DecoderStage {
+    WAITING,
+    PREAMBLE,
+    FRAME,
+    SUCCESS,
+    ENCRYPTED,
+    DAMAGED,
+}
+
+data class DecoderDiagnostic(
+    val stage: DecoderStage = DecoderStage.WAITING,
+    val preambleMatches: Int? = null,
+    val detail: String? = null,
+)
+
 data class ReceiverState(
     val phase: ReceiverPhase = ReceiverPhase.NEEDS_PASSWORD,
     val selectedInputId: Int? = null,
@@ -70,5 +98,7 @@ data class ReceiverState(
     val waterfall: List<SpectrumFrame> = emptyList(),
     val messages: List<DecodedMessage> = emptyList(),
     val partialTexts: Map<DecodeMode, String> = emptyMap(),
+    val captureInfo: AudioCaptureInfo? = null,
+    val decoderDiagnostic: DecoderDiagnostic = DecoderDiagnostic(),
     val error: String? = null,
 )

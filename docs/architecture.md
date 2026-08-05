@@ -1,6 +1,7 @@
 # Architecture
 
-1. `MainActivity` collects the session password and runtime permissions.
+1. `MainActivity` collects an optional FieldLink password and runtime permissions. Other modes do
+   not receive or use a password.
 2. `ReceiverService` owns `AudioRecord` and remains visible through an Android microphone
    foreground-service notification.
 3. `DecoderCoordinator` computes one shared spectrum and sends PCM blocks only to the single

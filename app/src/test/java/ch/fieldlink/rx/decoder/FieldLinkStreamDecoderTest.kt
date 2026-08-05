@@ -1,6 +1,8 @@
 package ch.fieldlink.rx.decoder
 
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.DecoderDiagnostic
+import ch.fieldlink.rx.model.DecoderStage
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.protocol.Crc32
 import ch.fieldlink.rx.protocol.FieldLinkCipher
@@ -35,29 +37,7 @@ class FieldLinkStreamDecoderTest {
             password = password.toCharArray(),
             compressed = false,
         )
-        val payloads = envelope.asList().chunked(96).map { it.toByteArray() }
-        val messages = mutableListOf<DecodedMessage>()
-        val diagnostics = mutableListOf<String>()
-        val decoder = FieldLinkStreamDecoder(
-            password = password.toCharArray(),
-            selectedMode = DecodeMode.FIELDLINK_FAST,
-            emit = messages::add,
-            diagnostic = diagnostics::add,
-        )
-
-        payloads.forEachIndexed { index, payload ->
-            val fixedBlock = packetBlock(messageId, index, payloads.size, payload)
-            val encoded = FieldLinkFec.encode(fixedBlock)
-            assertArrayEquals("FEC round-trip failed for packet $index", fixedBlock, FieldLinkFec.decode(encoded))
-            val packet = FieldLinkPacketCodec.fixedBlockToPacket(fixedBlock)
-            assertEquals(index, packet.index)
-            assertArrayEquals(payload, packet.payload)
-            val audio = modulateFast(encoded)
-            audio.asList().chunked(2_048).forEach { chunk ->
-                decoder.process(chunk.toFloatArray(), null)
-            }
-        }
-        decoder.close()
+        val (messages, diagnostics) = decodeFast(envelope, messageId, password.toCharArray())
 
         val direct = FieldLinkMessageCodec.decode(envelope, messageId, password.toCharArray())
         assertEquals("Direct AES decode failed", "TEST OK", (direct as? FieldLinkDecodeResult.Success)?.body?.text)
@@ -70,6 +50,77 @@ class FieldLinkStreamDecoderTest {
         )
         assertEquals("HB9ABC", decoded?.callsign)
         assertFalse(decoded?.encryptedWithoutKey ?: true)
+        assertEquals(DecoderStage.SUCCESS, diagnostics.last().stage)
+    }
+
+    @Test
+    fun `decodes unencrypted FieldLink audio without a password`() {
+        val messageId = byteArrayOf(8, 7, 6, 5, 4, 3, 2, 1)
+        val plaintext = """{"version":1,"kind":"message","callsign":"HB3RX","text":"KLARTEXT"}"""
+            .toByteArray(Charsets.UTF_8)
+        val envelope = FieldLinkCrypto.seal(
+            plaintext = plaintext,
+            messageId = messageId,
+            cipher = FieldLinkCipher.NONE,
+            password = CharArray(0),
+            compressed = false,
+        )
+
+        val (messages, diagnostics) = decodeFast(envelope, messageId, CharArray(0))
+
+        assertEquals("KLARTEXT", messages.single().text)
+        assertFalse(messages.single().encryptedWithoutKey)
+        assertEquals(DecoderStage.SUCCESS, diagnostics.last().stage)
+    }
+
+    @Test
+    fun `reports encrypted FieldLink audio when password is empty`() {
+        val messageId = byteArrayOf(2, 4, 6, 8, 1, 3, 5, 7)
+        val plaintext = """{"version":1,"kind":"message","callsign":"HB9RX","text":"GEHEIM"}"""
+            .toByteArray(Charsets.UTF_8)
+        val envelope = FieldLinkCrypto.seal(
+            plaintext = plaintext,
+            messageId = messageId,
+            cipher = FieldLinkCipher.AES_256_GCM,
+            password = "0123456789abcdef".toCharArray(),
+            compressed = false,
+        )
+
+        val (messages, diagnostics) = decodeFast(envelope, messageId, CharArray(0))
+
+        assertEquals(1, messages.size)
+        assertEquals(true, messages.single().encryptedWithoutKey)
+        assertEquals(DecoderStage.ENCRYPTED, diagnostics.last().stage)
+    }
+
+    private fun decodeFast(
+        envelope: ByteArray,
+        messageId: ByteArray,
+        password: CharArray,
+    ): Pair<List<DecodedMessage>, List<DecoderDiagnostic>> {
+        val payloads = envelope.asList().chunked(96).map { it.toByteArray() }
+        val messages = mutableListOf<DecodedMessage>()
+        val diagnostics = mutableListOf<DecoderDiagnostic>()
+        val decoder = FieldLinkStreamDecoder(
+            password = password,
+            selectedMode = DecodeMode.FIELDLINK_FAST,
+            emit = messages::add,
+            diagnostic = diagnostics::add,
+        )
+
+        payloads.forEachIndexed { index, payload ->
+            val fixedBlock = packetBlock(messageId, index, payloads.size, payload)
+            val encoded = FieldLinkFec.encode(fixedBlock)
+            assertArrayEquals("FEC round-trip failed for packet $index", fixedBlock, FieldLinkFec.decode(encoded))
+            val packet = FieldLinkPacketCodec.fixedBlockToPacket(fixedBlock)
+            assertEquals(index, packet.index)
+            assertArrayEquals(payload, packet.payload)
+            modulateFast(encoded).asList().chunked(2_048).forEach { chunk ->
+                decoder.process(chunk.toFloatArray(), null)
+            }
+        }
+        decoder.close()
+        return messages to diagnostics
     }
 
     private fun packetBlock(

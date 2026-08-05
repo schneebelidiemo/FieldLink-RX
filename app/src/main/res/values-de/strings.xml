@@ -2,9 +2,9 @@
 <resources>
     <string name="app_name">FieldLink RX</string>
     <string name="session_title">Empfänger starten</string>
-    <string name="session_explanation">Gib das FieldLink-Gruppenpasswort ein. Es ist vor dem Empfang erforderlich und wird nie gespeichert.</string>
-    <string name="password_label">Gruppenpasswort</string>
-    <string name="password_minimum">Mindestens 16 Zeichen</string>
+    <string name="session_explanation">Wähle einen Decoder und einen Audioeingang. Ein Passwort wird nur für verschlüsselte Nachrichten in FieldLink Schnell oder Weit verwendet und nie gespeichert.</string>
+    <string name="password_label">FieldLink-Passwort (optional)</string>
+    <string name="password_minimum">Für unverschlüsseltes FieldLink leer lassen, sonst mindestens 16 Zeichen eingeben</string>
     <string name="start_reception">Empfang starten</string>
     <string name="stop_reception">Empfang stoppen</string>
     <string name="new_session">Neue Sitzung</string>
@@ -32,6 +32,19 @@
     <string name="signal_level">Pegel</string>
     <string name="audio_frequency">Audiofrequenz</string>
     <string name="decoder_status">Decoderstatus</string>
+    <string name="audio_capture_info">Audio: %1$d Hz · %2$s · %3$s</string>
+    <string name="audio_device_unknown">Audioverbindung nicht gemeldet</string>
+    <string name="audio_source_unprocessed">unverarbeitet</string>
+    <string name="audio_source_voice_recognition">Spracherkennung</string>
+    <string name="audio_source_microphone">Mikrofon</string>
+    <string name="audio_source_other">andere Quelle</string>
+    <string name="decoder_waiting_fieldlink">Warte auf das FieldLink-Vorsignal</string>
+    <string name="decoder_preamble">Vorsignal-Kandidat: %1$d/%2$d Symbole</string>
+    <string name="decoder_frame">Paket erkannt; FEC und CRC werden geprüft</string>
+    <string name="decoder_success">FieldLink-Nachricht erfolgreich decodiert</string>
+    <string name="decoder_encrypted">Verschlüsselte FieldLink-Nachricht erkannt</string>
+    <string name="decoder_damaged">FieldLink-Signal erkannt, Decodierung fehlgeschlagen</string>
+    <string name="decoder_damaged_detail">FieldLink-Signal erkannt, Decodierung fehlgeschlagen: %1$s</string>
     <string name="messages">Nachrichten</string>
     <string name="no_messages">Noch keine Nachricht decodiert</string>
     <string name="uncertain">Unsicher</string>

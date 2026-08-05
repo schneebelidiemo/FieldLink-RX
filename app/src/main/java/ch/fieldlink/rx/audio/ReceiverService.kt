@@ -68,7 +68,7 @@ class ReceiverService : Service() {
 
         val password = ReceiverRuntime.passwordCopy()
         if (password == null) {
-            ReceiverRuntime.error("The receiver was started without a session password.")
+            ReceiverRuntime.error("The receiver was started without session configuration.")
             stopReceiver()
             return
         }
@@ -92,8 +92,9 @@ class ReceiverService : Service() {
                 val pcmRecorder = PcmRecorder(this, inputId)
                 recorder = pcmRecorder
                 val audioRecord = pcmRecorder.start()
+                ReceiverRuntime.captureInfo(pcmRecorder.captureInfo())
                 ReceiverRuntime.listening()
-                audioLoop(audioRecord, decoder)
+                audioLoop(audioRecord, pcmRecorder, decoder)
             } catch (error: Throwable) {
                 if (running.get()) ReceiverRuntime.error(error.message ?: getString(R.string.service_error))
             } finally {
@@ -105,13 +106,18 @@ class ReceiverService : Service() {
         }
     }
 
-    private fun audioLoop(audioRecord: AudioRecord, decoder: DecoderCoordinator) {
+    private fun audioLoop(audioRecord: AudioRecord, pcmRecorder: PcmRecorder, decoder: DecoderCoordinator) {
         val pcm = ShortArray(PcmRecorder.BLOCK_SAMPLES)
         val samples = FloatArray(PcmRecorder.BLOCK_SAMPLES)
+        var refreshedRoute = false
         while (running.get()) {
             val count = audioRecord.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
             if (count < 0) error("AudioRecord read failed with code $count.")
             if (count == 0) continue
+            if (!refreshedRoute) {
+                ReceiverRuntime.captureInfo(pcmRecorder.captureInfo())
+                refreshedRoute = true
+            }
             for (index in 0 until count) samples[index] = pcm[index] / 32768f
             decoder.process(if (count == samples.size) samples else samples.copyOf(count))
         }

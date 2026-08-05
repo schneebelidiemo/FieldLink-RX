@@ -4,6 +4,8 @@ import ch.fieldlink.rx.audio.PcmRecorder
 import ch.fieldlink.rx.dsp.FloatRingBuffer
 import ch.fieldlink.rx.dsp.SpectrumAnalysis
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.DecoderDiagnostic
+import ch.fieldlink.rx.model.DecoderStage
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.protocol.FieldLinkDecodeResult
 import ch.fieldlink.rx.protocol.FieldLinkFec
@@ -20,14 +22,16 @@ class FieldLinkStreamDecoder(
     private val password: CharArray,
     selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
-    private val diagnostic: ((String) -> Unit)? = null,
+    private val diagnostic: ((DecoderDiagnostic) -> Unit)? = null,
 ) : AudioDecoder {
     companion object {
         private const val CENTER_HZ = 1_500.0
         private const val PREAMBLE_SYMBOLS = 32
-        // The desktop modem accepts 75 % of the 32-symbol preamble. Matching
-        // the receiver to that threshold improves microphone-path tolerance.
-        private const val MIN_PREAMBLE_MATCHES = 24
+        // A microphone path can smear a few short symbols. The desktop accepts
+        // 24/32; RX accepts 22/32 and still requires the complete FEC and CRC.
+        private const val MIN_PREAMBLE_MATCHES = 22
+        private const val DIAGNOSTIC_PREAMBLE_MATCHES = 12
+        private const val PHASE_COUNT = 8
         private const val BUFFER_SAMPLES = 2_200_000
     }
 
@@ -62,15 +66,16 @@ class FieldLinkStreamDecoder(
     )
 
     private inner class ModeDetector(val profile: Profile) {
-        private val hop = profile.symbolSamples / 4
-        private val histories = Array(4) { ArrayDeque<ToneDetection>() }
-        private val nextStarts = LongArray(4) { phase -> (phase * hop).toLong() }
+        private val hop = profile.symbolSamples / PHASE_COUNT
+        private val histories = Array(PHASE_COUNT) { ArrayDeque<ToneDetection>() }
+        private val nextStarts = LongArray(PHASE_COUNT) { phase -> (phase * hop).toLong() }
+        private var bestReportedMatches = 0
         var pending: Candidate? = null
         var ignoreBefore: Long = 0
 
         fun scan() {
             if (pending != null) return
-            for (phase in 0 until 4) {
+            for (phase in 0 until PHASE_COUNT) {
                 var next = maxOf(nextStarts[phase], ring.startSample)
                 val phaseRemainder = ((next - phase * hop) % profile.symbolSamples + profile.symbolSamples) % profile.symbolSamples
                 if (phaseRemainder != 0L) next += profile.symbolSamples - phaseRemainder
@@ -90,14 +95,23 @@ class FieldLinkStreamDecoder(
                                 weightedOffset += value.offsetHz * value.confidence
                                 confidence += value.confidence
                             }
+                            if (matches >= DIAGNOSTIC_PREAMBLE_MATCHES && matches > bestReportedMatches) {
+                                bestReportedMatches = matches
+                                diagnostic?.invoke(
+                                    DecoderDiagnostic(
+                                        stage = DecoderStage.PREAMBLE,
+                                        preambleMatches = matches,
+                                    ),
+                                )
+                            }
                             if (matches >= MIN_PREAMBLE_MATCHES) {
-                                diagnostic?.invoke("preamble:${profile.mode.name}:$matches")
                                 pending = Candidate(
                                     start = history.first.start,
                                     offsetHz = if (confidence > 0.0) weightedOffset / confidence else 0.0,
                                     preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
                                 )
                                 histories.forEach { it.clear() }
+                                bestReportedMatches = 0
                                 return
                             }
                         }
@@ -139,7 +153,9 @@ class FieldLinkStreamDecoder(
             }
             pending = null
             ignoreBefore = candidate.start + profile.frameSamples
-            for (phase in 0 until 4) nextStarts[phase] = maxOf(nextStarts[phase], ignoreBefore + phase * hop)
+            for (phase in 0 until PHASE_COUNT) {
+                nextStarts[phase] = maxOf(nextStarts[phase], ignoreBefore + phase * hop)
+            }
 
             return DecodedFrame(
                 mode = profile.mode,
@@ -167,7 +183,7 @@ class FieldLinkStreamDecoder(
                 bitsPerSymbol = 4,
                 spacingHz = 100.0,
                 symbolSamples = 480,
-                offsets = intArrayOf(-40, -20, 0, 20, 40),
+                offsets = intArrayOf(-60, -30, 0, 30, 60),
             ),
         ),
         ModeDetector(
@@ -177,7 +193,7 @@ class FieldLinkStreamDecoder(
                 bitsPerSymbol = 3,
                 spacingHz = 20.0,
                 symbolSamples = 2_400,
-                offsets = intArrayOf(-12, -8, -4, 0, 4, 8, 12),
+                offsets = intArrayOf(-18, -12, -6, 0, 6, 12, 18),
             ),
         ),
     ).filter { it.profile.mode == selectedMode }.also {
@@ -194,14 +210,14 @@ class FieldLinkStreamDecoder(
     }
 
     private fun decodeFrame(frame: DecodedFrame) {
-        diagnostic?.invoke("frame:${frame.mode.name}")
+        diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.FRAME))
         try {
             val block = FieldLinkFec.decode(frame.bits)
             val packet = FieldLinkPacketCodec.fixedBlockToPacket(block)
             val envelope = assembler.add(packet) ?: return
             when (val result = FieldLinkMessageCodec.decode(envelope, packet.messageId, password)) {
                 is FieldLinkDecodeResult.Success -> {
-                    diagnostic?.invoke("success:${frame.mode.name}")
+                    diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.SUCCESS))
                     emit(
                         DecodedMessage(
                             id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
@@ -215,17 +231,20 @@ class FieldLinkStreamDecoder(
                         ),
                     )
                 }
-                is FieldLinkDecodeResult.EncryptedWithoutKey -> emit(
-                    DecodedMessage(
-                        id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
-                        mode = frame.mode,
-                        text = "Encrypted message received",
-                        audioFrequencyHz = frame.centerFrequencyHz,
-                        quality = frame.quality,
-                        uncertain = false,
-                        encryptedWithoutKey = true,
-                    ),
-                )
+                is FieldLinkDecodeResult.EncryptedWithoutKey -> {
+                    diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.ENCRYPTED))
+                    emit(
+                        DecodedMessage(
+                            id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                            mode = frame.mode,
+                            text = "Encrypted message received",
+                            audioFrequencyHz = frame.centerFrequencyHz,
+                            quality = frame.quality,
+                            uncertain = false,
+                            encryptedWithoutKey = true,
+                        ),
+                    )
+                }
                 is FieldLinkDecodeResult.Damaged -> emitDamaged(frame, result.reason)
             }
         } catch (error: Throwable) {
@@ -234,7 +253,7 @@ class FieldLinkStreamDecoder(
     }
 
     private fun emitDamaged(frame: DecodedFrame, reason: String) {
-        diagnostic?.invoke("damaged:${frame.mode.name}:$reason")
+        diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.DAMAGED, detail = reason))
         emit(
             DecodedMessage(
                 mode = frame.mode,
