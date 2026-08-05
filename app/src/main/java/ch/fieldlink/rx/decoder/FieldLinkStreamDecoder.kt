@@ -27,9 +27,9 @@ class FieldLinkStreamDecoder(
     companion object {
         private const val CENTER_HZ = 1_500.0
         private const val PREAMBLE_SYMBOLS = 32
-        // A microphone path can smear a few short symbols. The desktop accepts
-        // 24/32; RX accepts 22/32 and still requires the complete FEC and CRC.
-        private const val MIN_PREAMBLE_MATCHES = 22
+        // Keep the desktop's 24/32 threshold. The alternating preamble can
+        // otherwise reach 22 matches two symbols early and shift the frame.
+        private const val MIN_PREAMBLE_MATCHES = 24
         private const val DIAGNOSTIC_PREAMBLE_MATCHES = 12
         private const val PHASE_COUNT = 8
         private const val BUFFER_SAMPLES = 2_200_000
