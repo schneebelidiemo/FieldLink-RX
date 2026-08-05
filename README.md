@@ -33,7 +33,7 @@ and over-the-air audio on an Android phone.
 ## Build
 
 Open the repository in a current Android Studio installation, or run the GitHub Actions workflow.
-The workflow installs Gradle 9.5 and Android SDK 37, runs unit tests and lint, then uploads an
+The workflow installs Gradle 9.5 and Android SDK 36, runs unit tests and lint, then uploads an
 installable debug APK as `FieldLink-RX-Android-14`.
 
 ## Privacy
@@ -47,4 +47,3 @@ explicit user action and leaves FieldLink RX.
 FieldLink RX is receive-only. The encrypted FieldLink laboratory mode must not be transmitted over
 amateur-radio frequencies where encryption is prohibited. Users remain responsible for local band
 plans and regulations.
-

@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "ch.fieldlink.rx"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ch.fieldlink.rx"
@@ -71,4 +71,3 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
 }
-
