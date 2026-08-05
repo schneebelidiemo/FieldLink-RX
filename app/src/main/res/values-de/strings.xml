@@ -49,8 +49,8 @@
     <string name="mode_js8">JS8Call</string>
     <string name="status_experimental">Experimentell</string>
     <string name="status_planned">Nativer Decoder noch offen</string>
-    <string name="active_decoders">Aktiv: FieldLink, CW, RTTY, PSK31/63</string>
-    <string name="pending_decoders">Noch offen: FT8, FT4, JS8Call</string>
+    <string name="active_decoders">Aktiv: FieldLink, CW, RTTY, PSK31/63, FT8/FT4</string>
+    <string name="pending_decoders">Noch offen: JS8Call</string>
     <string name="password_show">Passwort anzeigen</string>
     <string name="password_hide">Passwort ausblenden</string>
     <string name="share_message">Decodierte Nachricht teilen</string>

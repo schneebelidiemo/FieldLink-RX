@@ -25,11 +25,36 @@ jobs:
       - uses: android-actions/setup-android@v3
 
       - name: Install Android SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358" "cmake;3.22.1"
 
       - uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: "9.5.0"
+
+      - name: FT8 and FT4 native reference vectors
+        run: |
+          native_dir="$RUNNER_TEMP/fieldlink-ftx-test"
+          vendor_dir="app/src/main/cpp/third_party/ft8_lib"
+          mkdir -p "$native_dir"
+          for source in \
+            "$vendor_dir/common/monitor.c" \
+            "$vendor_dir/fft/kiss_fft.c" \
+            "$vendor_dir/fft/kiss_fftr.c" \
+            "$vendor_dir/ft8/constants.c" \
+            "$vendor_dir/ft8/crc.c" \
+            "$vendor_dir/ft8/decode.c" \
+            "$vendor_dir/ft8/encode.c" \
+            "$vendor_dir/ft8/ldpc.c" \
+            "$vendor_dir/ft8/message.c" \
+            "$vendor_dir/ft8/text.c"; do
+            cc -std=c11 -O3 -D_GNU_SOURCE -I"$vendor_dir" -c "$source" -o "$native_dir/$(basename "$source").o"
+          done
+          c++ -std=c++17 -O3 -Iapp/src/main/cpp -I"$vendor_dir" \
+            -c app/src/main/cpp/ftx_engine.cpp -o "$native_dir/ftx_engine.o"
+          c++ -std=c++17 -O3 -Iapp/src/main/cpp -I"$vendor_dir" \
+            -c app/src/test/native/ftx_reference_test.cpp -o "$native_dir/ftx_reference_test.o"
+          c++ "$native_dir"/*.o -lm -o "$native_dir/ftx_reference_test"
+          "$native_dir/ftx_reference_test"
 
       - name: Unit tests and lint
         run: gradle --no-daemon testDebugUnitTest lintDebug
@@ -37,11 +62,11 @@ jobs:
       - name: Build installable test APK
         run: |
           gradle --no-daemon assembleDebug
-          cp app/build/outputs/apk/debug/app-debug.apk FieldLink-RX-0.1.0-debug.apk
+          cp app/build/outputs/apk/debug/app-debug.apk FieldLink-RX-0.2.0-arm64-debug.apk
 
       - uses: actions/upload-artifact@v4
         with:
           name: FieldLink-RX-Android-14
-          path: FieldLink-RX-0.1.0-debug.apk
+          path: FieldLink-RX-0.2.0-arm64-debug.apk
           if-no-files-found: error
           retention-days: 30
