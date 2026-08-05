@@ -10,6 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import ch.fieldlink.rx.audio.AudioInputRepository
 import ch.fieldlink.rx.audio.ReceiverService
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import ch.fieldlink.rx.ui.FieldLinkRxApp
 import ch.fieldlink.rx.ui.FieldLinkRxTheme
@@ -18,6 +19,7 @@ class MainActivity : ComponentActivity() {
     private var pendingPassword: String? = null
     private var pendingInputId: Int? = null
     private var pendingMode: DecodeMode? = null
+    private var pendingAudioCaptureMode: AudioCaptureMode? = null
 
     private val microphonePermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -41,6 +43,7 @@ class MainActivity : ComponentActivity() {
                     onRefreshInputs = ::refreshInputs,
                     onSelectInput = ReceiverRuntime::selectInput,
                     onSelectMode = ReceiverRuntime::selectMode,
+                    onSelectAudioCaptureMode = ReceiverRuntime::selectAudioCaptureMode,
                     onStart = ::requestStart,
                     onStop = { ReceiverService.stop(this) },
                     onNewSession = ReceiverRuntime::requireNewPassword,
@@ -58,10 +61,16 @@ class MainActivity : ComponentActivity() {
         ReceiverRuntime.setInputs(AudioInputRepository.list(this))
     }
 
-    private fun requestStart(password: String, inputId: Int?, mode: DecodeMode) {
+    private fun requestStart(
+        password: String,
+        inputId: Int?,
+        mode: DecodeMode,
+        audioCaptureMode: AudioCaptureMode,
+    ) {
         pendingPassword = password
         pendingInputId = inputId
         pendingMode = mode
+        pendingAudioCaptureMode = audioCaptureMode
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
@@ -81,10 +90,12 @@ class MainActivity : ComponentActivity() {
         val password = pendingPassword ?: return
         val inputId = pendingInputId
         val mode = pendingMode ?: return
+        val audioCaptureMode = pendingAudioCaptureMode ?: return
         pendingPassword = null
         pendingInputId = null
         pendingMode = null
-        ReceiverRuntime.configure(password, inputId, mode)
+        pendingAudioCaptureMode = null
+        ReceiverRuntime.configure(password, inputId, mode, audioCaptureMode)
         ReceiverService.start(this)
     }
 }

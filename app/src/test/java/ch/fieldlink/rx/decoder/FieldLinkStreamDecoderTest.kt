@@ -66,7 +66,12 @@ class FieldLinkStreamDecoderTest {
             compressed = false,
         )
 
-        val (messages, diagnostics) = decodeFast(envelope, messageId, CharArray(0))
+        val (messages, diagnostics) = decodeFast(
+            envelope = envelope,
+            messageId = messageId,
+            password = CharArray(0),
+            audioTransform = ::simulateSpeakerMicrophonePath,
+        )
 
         assertEquals("KLARTEXT", messages.single().text)
         assertFalse(messages.single().encryptedWithoutKey)
@@ -97,6 +102,7 @@ class FieldLinkStreamDecoderTest {
         envelope: ByteArray,
         messageId: ByteArray,
         password: CharArray,
+        audioTransform: (FloatArray) -> FloatArray = { it },
     ): Pair<List<DecodedMessage>, List<DecoderDiagnostic>> {
         val payloads = envelope.asList().chunked(96).map { it.toByteArray() }
         val messages = mutableListOf<DecodedMessage>()
@@ -115,12 +121,28 @@ class FieldLinkStreamDecoderTest {
             val packet = FieldLinkPacketCodec.fixedBlockToPacket(fixedBlock)
             assertEquals(index, packet.index)
             assertArrayEquals(payload, packet.payload)
-            modulateFast(encoded).asList().chunked(2_048).forEach { chunk ->
+            audioTransform(modulateFast(encoded)).asList().chunked(2_048).forEach { chunk ->
                 decoder.process(chunk.toFloatArray(), null)
             }
         }
         decoder.close()
         return messages to diagnostics
+    }
+
+    private fun simulateSpeakerMicrophonePath(input: FloatArray): FloatArray {
+        val output = FloatArray(input.size)
+        var lowPass = 0f
+        var noiseState = 0x12345678
+        for (index in input.indices) {
+            lowPass += 0.42f * (input[index] - lowPass)
+            val shortEcho = input.getOrElse(index - 96) { 0f }
+            val roomEcho = input.getOrElse(index - 288) { 0f }
+            noiseState = noiseState * 1_103_515_245 + 12_345
+            val noise = (((noiseState ushr 16) and 0x7fff) / 16_384f - 1f) * 0.0015f
+            val hum = (sin(2.0 * PI * 200.0 * index / 48_000.0) * 0.025).toFloat()
+            output[index] = lowPass * 0.045f + shortEcho * 0.012f + roomEcho * 0.006f + hum + noise
+        }
+        return output
     }
 
     private fun packetBlock(

@@ -3,10 +3,13 @@
 1. `MainActivity` collects an optional FieldLink password and runtime permissions. Other modes do
    not receive or use a password.
 2. `ReceiverService` owns `AudioRecord` and remains visible through an Android microphone
-   foreground-service notification.
+   foreground-service notification. The user selects the physical input and Android capture path
+   (standard microphone, voice recognition, automatic or unprocessed where supported) separately.
 3. `DecoderCoordinator` computes one shared spectrum and sends PCM blocks only to the single
    decoder selected on the start screen.
 4. `ReceiverRuntime` exposes immutable state to the Compose UI and keeps message history in memory.
+   Starting or ending a decoder session clears that volatile history so results from different
+   manually selected modes cannot be confused.
 5. Message actions use Android intents for copy, share and Google Maps.
 6. `FtxLiveDecoder` downsamples to 12 kHz, evaluates overlapping FT8/FT4 receive windows on a
    dedicated worker, and forwards at most three strongest valid decodes per cycle.

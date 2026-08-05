@@ -25,6 +25,11 @@
     <string name="action_map">Google Maps</string>
     <string name="audio_input">Audio input</string>
     <string name="choose_audio_input">Select an audio input manually</string>
+    <string name="choose_audio_processing">Microphone processing</string>
+    <string name="audio_capture_automatic">Automatic</string>
+    <string name="audio_capture_unprocessed">Unprocessed (if supported)</string>
+    <string name="audio_capture_voice_recognition">Voice recognition path</string>
+    <string name="audio_capture_microphone">Standard microphone</string>
     <string name="choose_decoder">Select one decoder</string>
     <string name="selected_decoder">Selected decoder</string>
     <string name="decoder_not_selected">No decoder selected</string>
@@ -39,7 +44,7 @@
     <string name="audio_source_microphone">microphone</string>
     <string name="audio_source_other">other source</string>
     <string name="decoder_waiting_fieldlink">Waiting for the FieldLink preamble</string>
-    <string name="decoder_preamble">Preamble candidate: %1$d/%2$d symbols</string>
+    <string name="decoder_preamble">Preamble: %1$d/%2$d · unique sync: %3$d/%4$d</string>
     <string name="decoder_frame">Packet detected; checking FEC and CRC</string>
     <string name="decoder_success">FieldLink message decoded successfully</string>
     <string name="decoder_encrypted">Encrypted FieldLink message detected</string>

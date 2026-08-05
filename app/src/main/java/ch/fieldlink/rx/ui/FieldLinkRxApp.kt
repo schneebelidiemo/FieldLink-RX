@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ch.fieldlink.rx.R
 import ch.fieldlink.rx.model.AudioInput
+import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.AudioCaptureSource
 import ch.fieldlink.rx.model.Coordinates
 import ch.fieldlink.rx.model.DecodeMode
@@ -80,7 +81,8 @@ fun FieldLinkRxApp(
     onRefreshInputs: () -> Unit,
     onSelectInput: (Int) -> Unit,
     onSelectMode: (DecodeMode) -> Unit,
-    onStart: (String, Int?, DecodeMode) -> Unit,
+    onSelectAudioCaptureMode: (AudioCaptureMode) -> Unit,
+    onStart: (String, Int?, DecodeMode, AudioCaptureMode) -> Unit,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
 ) {
@@ -110,6 +112,7 @@ fun FieldLinkRxApp(
                 onRefreshInputs = onRefreshInputs,
                 onSelectInput = onSelectInput,
                 onSelectMode = onSelectMode,
+                onSelectAudioCaptureMode = onSelectAudioCaptureMode,
                 onStart = onStart,
                 modifier = Modifier.padding(padding),
             )
@@ -129,13 +132,15 @@ private fun SetupScreen(
     onRefreshInputs: () -> Unit,
     onSelectInput: (Int) -> Unit,
     onSelectMode: (DecodeMode) -> Unit,
-    onStart: (String, Int?, DecodeMode) -> Unit,
+    onSelectAudioCaptureMode: (AudioCaptureMode) -> Unit,
+    onStart: (String, Int?, DecodeMode, AudioCaptureMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
     var modeMenuOpen by remember { mutableStateOf(false) }
+    var captureModeMenuOpen by remember { mutableStateOf(false) }
     val selected = state.inputs.firstOrNull { it.id == state.selectedInputId }
     val fieldLinkSelected = state.selectedMode.isFieldLink()
     val passwordValid = !fieldLinkSelected || password.isEmpty() || password.length >= 16
@@ -211,12 +216,35 @@ private fun SetupScreen(
             }
         }
 
+        Text(stringResource(R.string.choose_audio_processing), style = MaterialTheme.typography.titleMedium)
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { captureModeMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(captureModeLabel(state.audioCaptureMode))
+            }
+            DropdownMenu(expanded = captureModeMenuOpen, onDismissRequest = { captureModeMenuOpen = false }) {
+                AudioCaptureMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(captureModeLabel(mode)) },
+                        onClick = {
+                            onSelectAudioCaptureMode(mode)
+                            captureModeMenuOpen = false
+                        },
+                    )
+                }
+            }
+        }
+
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.weight(1f))
         Button(
             onClick = {
                 state.selectedMode?.let { mode ->
-                    onStart(if (mode.isFieldLink()) password else "", state.selectedInputId, mode)
+                    onStart(
+                        if (mode.isFieldLink()) password else "",
+                        state.selectedInputId,
+                        mode,
+                        state.audioCaptureMode,
+                    )
                 }
             },
             modifier = Modifier.fillMaxWidth(),
@@ -410,6 +438,8 @@ private fun diagnosticText(diagnostic: DecoderDiagnostic): String = when (diagno
         R.string.decoder_preamble,
         diagnostic.preambleMatches ?: 0,
         32,
+        diagnostic.syncMatches ?: 0,
+        8,
     )
     DecoderStage.FRAME -> stringResource(R.string.decoder_frame)
     DecoderStage.SUCCESS -> stringResource(R.string.decoder_success)
@@ -418,6 +448,16 @@ private fun diagnosticText(diagnostic: DecoderDiagnostic): String = when (diagno
         stringResource(R.string.decoder_damaged_detail, it)
     } ?: stringResource(R.string.decoder_damaged)
 }
+
+@Composable
+private fun captureModeLabel(mode: AudioCaptureMode): String = stringResource(
+    when (mode) {
+        AudioCaptureMode.AUTOMATIC -> R.string.audio_capture_automatic
+        AudioCaptureMode.UNPROCESSED -> R.string.audio_capture_unprocessed
+        AudioCaptureMode.VOICE_RECOGNITION -> R.string.audio_capture_voice_recognition
+        AudioCaptureMode.MICROPHONE -> R.string.audio_capture_microphone
+    },
+)
 
 @Composable
 private fun modeLabel(mode: DecodeMode): String = stringResource(

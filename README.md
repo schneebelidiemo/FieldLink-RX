@@ -19,7 +19,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.3.2 |
+| Mode | Status in 0.3.3 |
 | --- | --- |
 | FieldLink Fast/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Live adaptive decoder, results include confidence |
@@ -34,10 +34,13 @@ and over-the-air audio on an Android phone.
 Exactly one decoder is selected manually before reception. FieldLink Fast and FieldLink Wide are
 separate choices, as are CW, RTTY, PSK31, PSK63, FT8, FT4 and JS8Call. This prevents unrelated
 decoders from consuming CPU or influencing the selected mode's live processing. The FieldLink
-preamble synchronizer checks eight timing phases and reports its live stage in the UI. Encrypted,
-unencrypted and missing-password desktop-compatible audio round-trips are covered by Android unit
-tests. The password field is shown only for FieldLink Fast/Wide and may be left empty for cleartext
-reception; all other decoders always receive without a password.
+preamble synchronizer checks eight timing phases and validates the unique final eight-tone sync word
+separately from the alternating lead-in. The UI reports both values. Encrypted, unencrypted,
+missing-password and simulated speaker-to-microphone round-trips are covered by Android unit tests.
+The password field is shown only for FieldLink Fast/Wide and may be left empty for cleartext
+reception; all other decoders always receive without a password. Android microphone processing is
+manually selectable between standard microphone, voice-recognition path, automatic and unprocessed
+capture where supported.
 
 ## Build
 

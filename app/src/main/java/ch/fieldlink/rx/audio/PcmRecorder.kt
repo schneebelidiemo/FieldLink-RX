@@ -11,12 +11,14 @@ import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.AutomaticGainControl
 import android.media.audiofx.NoiseSuppressor
 import ch.fieldlink.rx.model.AudioCaptureInfo
+import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.AudioCaptureSource
 import kotlin.math.max
 
 class PcmRecorder(
     private val context: Context,
     private val selectedDeviceId: Int?,
+    private val captureMode: AudioCaptureMode,
 ) : AutoCloseable {
     companion object {
         const val SAMPLE_RATE = 48_000
@@ -45,10 +47,18 @@ class PcmRecorder(
         val supportsUnprocessed = manager
             .getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED)
             ?.toBooleanStrictOrNull() == true
-        val sources = buildList {
-            if (supportsUnprocessed) add(MediaRecorder.AudioSource.UNPROCESSED)
-            add(MediaRecorder.AudioSource.VOICE_RECOGNITION)
-            add(MediaRecorder.AudioSource.MIC)
+        val sources = when (captureMode) {
+            AudioCaptureMode.AUTOMATIC -> buildList {
+                if (supportsUnprocessed) add(MediaRecorder.AudioSource.UNPROCESSED)
+                add(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+                add(MediaRecorder.AudioSource.MIC)
+            }
+            AudioCaptureMode.UNPROCESSED -> {
+                check(supportsUnprocessed) { "This Android device does not support unprocessed audio capture." }
+                listOf(MediaRecorder.AudioSource.UNPROCESSED)
+            }
+            AudioCaptureMode.VOICE_RECOGNITION -> listOf(MediaRecorder.AudioSource.VOICE_RECOGNITION)
+            AudioCaptureMode.MICROPHONE -> listOf(MediaRecorder.AudioSource.MIC)
         }.distinct()
         val format = AudioFormat.Builder()
             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)

@@ -14,7 +14,6 @@ import ch.fieldlink.rx.protocol.FieldLinkPacketAssembler
 import ch.fieldlink.rx.protocol.FieldLinkPacketCodec
 import java.util.ArrayDeque
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 
@@ -27,9 +26,11 @@ class FieldLinkStreamDecoder(
     companion object {
         private const val CENTER_HZ = 1_500.0
         private const val PREAMBLE_SYMBOLS = 32
-        // Keep the desktop's 24/32 threshold. The alternating preamble can
-        // otherwise reach 22 matches two symbols early and shift the frame.
-        private const val MIN_PREAMBLE_MATCHES = 24
+        // The last eight tones are the unique sync word. Requiring six of them
+        // prevents the long alternating lead-in from locking two symbols early,
+        // while allowing an acoustic path to damage part of the lead-in.
+        private const val MIN_ALTERNATING_MATCHES = 12
+        private const val MIN_SYNC_MATCHES = 6
         private const val DIAGNOSTIC_PREAMBLE_MATCHES = 12
         private const val PHASE_COUNT = 8
         private const val BUFFER_SAMPLES = 2_200_000
@@ -63,6 +64,7 @@ class FieldLinkStreamDecoder(
         val start: Long,
         val offsetHz: Double,
         val preambleQuality: Float,
+        val score: Double,
     )
 
     private inner class ModeDetector(val profile: Profile) {
@@ -75,6 +77,7 @@ class FieldLinkStreamDecoder(
 
         fun scan() {
             if (pending != null) return
+            var bestCandidate: Candidate? = null
             for (phase in 0 until PHASE_COUNT) {
                 var next = maxOf(nextStarts[phase], ring.startSample)
                 val phaseRemainder = ((next - phase * hop) % profile.symbolSamples + profile.symbolSamples) % profile.symbolSamples
@@ -87,37 +90,52 @@ class FieldLinkStreamDecoder(
                         history.addLast(detection)
                         while (history.size > PREAMBLE_SYMBOLS) history.removeFirst()
                         if (history.size == PREAMBLE_SYMBOLS) {
-                            var matches = 0
+                            var alternatingMatches = 0
+                            var syncMatches = 0
                             var weightedOffset = 0.0
                             var confidence = 0.0
                             history.forEachIndexed { index, value ->
-                                if (value.tone == profile.pattern[index]) matches += 1
-                                weightedOffset += value.offsetHz * value.confidence
-                                confidence += value.confidence
+                                if (value.tone == profile.pattern[index]) {
+                                    if (index < 24) alternatingMatches += 1 else syncMatches += 1
+                                    weightedOffset += value.offsetHz * value.confidence
+                                    confidence += value.confidence
+                                }
                             }
+                            val matches = alternatingMatches + syncMatches
                             if (matches >= DIAGNOSTIC_PREAMBLE_MATCHES && matches > bestReportedMatches) {
                                 bestReportedMatches = matches
                                 diagnostic?.invoke(
                                     DecoderDiagnostic(
                                         stage = DecoderStage.PREAMBLE,
                                         preambleMatches = matches,
+                                        syncMatches = syncMatches,
                                     ),
                                 )
                             }
-                            if (matches >= MIN_PREAMBLE_MATCHES) {
-                                pending = Candidate(
+                            if (
+                                alternatingMatches >= MIN_ALTERNATING_MATCHES &&
+                                syncMatches >= MIN_SYNC_MATCHES
+                            ) {
+                                val averageConfidence = if (matches > 0) confidence / matches else 0.0
+                                val candidate = Candidate(
                                     start = history.first.start,
                                     offsetHz = if (confidence > 0.0) weightedOffset / confidence else 0.0,
                                     preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
+                                    score = syncMatches * 10.0 + alternatingMatches + averageConfidence,
                                 )
-                                histories.forEach { it.clear() }
-                                bestReportedMatches = 0
-                                return
+                                if (bestCandidate == null || candidate.score > bestCandidate.score) {
+                                    bestCandidate = candidate
+                                }
                             }
                         }
                     }
                     next += profile.symbolSamples
                 }
+            }
+            bestCandidate?.let { candidate ->
+                pending = candidate
+                histories.forEach { it.clear() }
+                bestReportedMatches = 0
             }
         }
 
@@ -310,9 +328,11 @@ class FieldLinkStreamDecoder(
         val coefficient = 2.0 * cos(omega)
         var previous = 0.0
         var previousPrevious = 0.0
-        for (index in samples.indices) {
-            val hann = 0.5 - 0.5 * cos(2.0 * PI * index / (samples.size - 1).coerceAtLeast(1))
-            val current = samples[index] * hann + coefficient * previous - previousPrevious
+        // A rectangular symbol window is deliberate: FieldLink tone spacing is
+        // exactly one Fourier bin (100 Hz/10 ms or 20 Hz/50 ms). A Hann window
+        // broadens the main lobe across adjacent MFSK tones.
+        for (sample in samples) {
+            val current = sample + coefficient * previous - previousPrevious
             previousPrevious = previous
             previous = current
         }

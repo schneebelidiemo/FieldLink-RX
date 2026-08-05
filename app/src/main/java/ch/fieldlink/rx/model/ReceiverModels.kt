@@ -74,6 +74,13 @@ enum class AudioCaptureSource {
     OTHER,
 }
 
+enum class AudioCaptureMode {
+    AUTOMATIC,
+    UNPROCESSED,
+    VOICE_RECOGNITION,
+    MICROPHONE,
+}
+
 enum class DecoderStage {
     WAITING,
     PREAMBLE,
@@ -86,6 +93,7 @@ enum class DecoderStage {
 data class DecoderDiagnostic(
     val stage: DecoderStage = DecoderStage.WAITING,
     val preambleMatches: Int? = null,
+    val syncMatches: Int? = null,
     val detail: String? = null,
 )
 
@@ -93,6 +101,7 @@ data class ReceiverState(
     val phase: ReceiverPhase = ReceiverPhase.NEEDS_PASSWORD,
     val selectedInputId: Int? = null,
     val selectedMode: DecodeMode? = null,
+    val audioCaptureMode: AudioCaptureMode = AudioCaptureMode.MICROPHONE,
     val inputs: List<AudioInput> = emptyList(),
     val signal: SignalSnapshot = SignalSnapshot(),
     val waterfall: List<SpectrumFrame> = emptyList(),

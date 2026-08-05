@@ -2,6 +2,7 @@ package ch.fieldlink.rx.runtime
 
 import ch.fieldlink.rx.model.AudioInput
 import ch.fieldlink.rx.model.AudioCaptureInfo
+import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.DecoderDiagnostic
 import ch.fieldlink.rx.model.DecodedMessage
@@ -24,7 +25,12 @@ object ReceiverRuntime {
     private val mutableState = MutableStateFlow(ReceiverState())
     val state: StateFlow<ReceiverState> = mutableState.asStateFlow()
 
-    fun configure(passwordText: String, selectedInputId: Int?, selectedMode: DecodeMode) {
+    fun configure(
+        passwordText: String,
+        selectedInputId: Int?,
+        selectedMode: DecodeMode,
+        audioCaptureMode: AudioCaptureMode,
+    ) {
         require(passwordText.isEmpty() || passwordText.length >= 16) {
             "Leave the password empty or enter at least 16 characters."
         }
@@ -37,6 +43,11 @@ object ReceiverRuntime {
                 phase = ReceiverPhase.STARTING,
                 selectedInputId = selectedInputId,
                 selectedMode = selectedMode,
+                audioCaptureMode = audioCaptureMode,
+                signal = SignalSnapshot(),
+                waterfall = emptyList(),
+                messages = emptyList(),
+                partialTexts = emptyMap(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
                 error = null,
@@ -60,7 +71,11 @@ object ReceiverRuntime {
     }
 
     fun selectMode(mode: DecodeMode) {
-        mutableState.update { it.copy(selectedMode = mode) }
+        mutableState.update { it.copy(selectedMode = mode, decoderDiagnostic = DecoderDiagnostic()) }
+    }
+
+    fun selectAudioCaptureMode(mode: AudioCaptureMode) {
+        mutableState.update { it.copy(audioCaptureMode = mode) }
     }
 
     fun listening() {
@@ -114,6 +129,7 @@ object ReceiverRuntime {
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
                 partialTexts = emptyMap(),
+                messages = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
             )
@@ -132,6 +148,7 @@ object ReceiverRuntime {
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
                 partialTexts = emptyMap(),
+                messages = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
                 error = null,

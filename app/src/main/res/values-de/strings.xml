@@ -25,6 +25,11 @@
     <string name="action_map">Google Maps</string>
     <string name="audio_input">Audioeingang</string>
     <string name="choose_audio_input">Audioeingang manuell auswählen</string>
+    <string name="choose_audio_processing">Mikrofonverarbeitung</string>
+    <string name="audio_capture_automatic">Automatisch</string>
+    <string name="audio_capture_unprocessed">Unverarbeitet (falls unterstützt)</string>
+    <string name="audio_capture_voice_recognition">Spracherkennungs-Audiopfad</string>
+    <string name="audio_capture_microphone">Normales Mikrofon</string>
     <string name="choose_decoder">Einen Decoder auswählen</string>
     <string name="selected_decoder">Ausgewählter Decoder</string>
     <string name="decoder_not_selected">Kein Decoder ausgewählt</string>
@@ -39,7 +44,7 @@
     <string name="audio_source_microphone">Mikrofon</string>
     <string name="audio_source_other">andere Quelle</string>
     <string name="decoder_waiting_fieldlink">Warte auf das FieldLink-Vorsignal</string>
-    <string name="decoder_preamble">Vorsignal-Kandidat: %1$d/%2$d Symbole</string>
+    <string name="decoder_preamble">Vorsignal: %1$d/%2$d · eindeutige Synchronisation: %3$d/%4$d</string>
     <string name="decoder_frame">Paket erkannt; FEC und CRC werden geprüft</string>
     <string name="decoder_success">FieldLink-Nachricht erfolgreich decodiert</string>
     <string name="decoder_encrypted">Verschlüsselte FieldLink-Nachricht erkannt</string>

@@ -75,6 +75,7 @@ class ReceiverService : Service() {
 
         val inputId = ReceiverRuntime.state.value.selectedInputId
         val selectedMode = ReceiverRuntime.state.value.selectedMode
+        val audioCaptureMode = ReceiverRuntime.state.value.audioCaptureMode
         if (selectedMode == null) {
             ReceiverRuntime.error("The receiver was started without a selected decoder.")
             password.fill('\u0000')
@@ -89,7 +90,7 @@ class ReceiverService : Service() {
                     onMessage = ::onDecodedMessage,
                 )
                 coordinator = decoder
-                val pcmRecorder = PcmRecorder(this, inputId)
+                val pcmRecorder = PcmRecorder(this, inputId, audioCaptureMode)
                 recorder = pcmRecorder
                 val audioRecord = pcmRecorder.start()
                 ReceiverRuntime.captureInfo(pcmRecorder.captureInfo())
