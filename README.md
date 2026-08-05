@@ -13,29 +13,36 @@ displays a 0–3 kHz waterfall and feeds the samples to independent decoder modu
 - no audio recordings, network transport, accounts or persistent message history
 - GPL-3.0-or-later
 
-The Android interface and FieldLink modem are architecture-neutral. The FT8/FT4 weak-signal
-decoder is native code, so the current APK is deliberately built for ARM64 (`arm64-v8a`).
+The Android interface and FieldLink modem are architecture-neutral. The FT8/FT4 and JS8Call
+weak-signal decoders are native code, so the current APK is deliberately built for ARM64
+(`arm64-v8a`).
 
 ## Decoder status
 
-| Mode | Status in 0.2.0 |
+| Mode | Status in 0.3.0 |
 | --- | --- |
 | FieldLink Fast/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Live adaptive decoder, results include confidence |
 | RTTY | Live 45.45 baud / 170 Hz Baudot decoder, experimental |
 | PSK31/PSK63 | Decoder interface and signal classifier, experimental |
 | FT8/FT4 | Native ARM64 live decoder with overlapping windows and reference-vector tests |
-| JS8Call | Planned after the FT8/FT4 native integration |
+| JS8Call | Official native RX core integrated for Normal, Fast, Turbo/40, Slow and Ultra/60; reference and over-the-air validation pending |
 
 This table is intentionally strict: a mode is not marked complete until it decodes reference audio
 and over-the-air audio on an Android phone.
 
 ## Build
 
-Open the repository in a current Android Studio installation, or run the GitHub Actions workflow.
+Clone the repository with submodules and open it in a current Android Studio installation, or run
+the GitHub Actions workflow:
+
+```shell
+git clone --recurse-submodules https://github.com/schneebelidiemo/FieldLink-RX.git
+```
+
 The workflow installs Gradle 9.5, Android SDK 36, NDK 28.2 and CMake 3.22. It runs native FT8/FT4
-reference vectors, Kotlin unit tests and Android lint, then uploads an ARM64 debug APK as
-`FieldLink-RX-Android-14`.
+reference vectors, Kotlin unit tests and Android lint, builds the receive-only JS8 native bridge,
+then uploads an ARM64 debug APK as `FieldLink-RX-Android-14`.
 
 ## Privacy
 

@@ -34,6 +34,7 @@ class DecoderCoordinator(
             PskDecoder(onMessage) { mode, text -> ReceiverRuntime.partial(mode, text) },
         ),
         DecoderSlot("FT8/FT4", FtxLiveDecoder(onMessage)),
+        DecoderSlot("JS8Call", Js8LiveDecoder(onMessage)),
     )
 
     fun process(samples: FloatArray) {

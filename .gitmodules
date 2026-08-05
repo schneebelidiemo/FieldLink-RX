@@ -1,0 +1,4 @@
+[submodule "third_party/js8call-android-port"]
+	path = third_party/js8call-android-port
+	url = https://github.com/JS8Call-improved/Android-port.git
+	branch = master
