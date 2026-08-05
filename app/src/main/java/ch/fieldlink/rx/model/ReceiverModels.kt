@@ -64,6 +64,7 @@ data class SignalSnapshot(
 data class ReceiverState(
     val phase: ReceiverPhase = ReceiverPhase.NEEDS_PASSWORD,
     val selectedInputId: Int? = null,
+    val selectedMode: DecodeMode? = null,
     val inputs: List<AudioInput> = emptyList(),
     val signal: SignalSnapshot = SignalSnapshot(),
     val waterfall: List<SpectrumFrame> = emptyList(),
@@ -71,4 +72,3 @@ data class ReceiverState(
     val partialTexts: Map<DecodeMode, String> = emptyMap(),
     val error: String? = null,
 )
-

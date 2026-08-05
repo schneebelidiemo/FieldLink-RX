@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 class FtxLiveDecoder(
+    private val selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
 ) : AudioDecoder {
     companion object {
@@ -24,72 +25,57 @@ class FtxLiveDecoder(
         private const val MAXIMUM_MESSAGES = 3
     }
 
-    private data class Work(
-        val ft8: FloatArray?,
-        val ft4: FloatArray?,
-    )
-
     private val decimator = Decimator4()
-    private val ring = FloatRingBuffer(FT8_WINDOW + FT8_HOP)
+    private val window = if (selectedMode == DecodeMode.FT8) FT8_WINDOW else FT4_WINDOW
+    private val hop = if (selectedMode == DecodeMode.FT8) FT8_HOP else FT4_HOP
+    private val nativeMode = if (selectedMode == DecodeMode.FT8) DecodeModeKey.FT8 else DecodeModeKey.FT4
+    private val ring = FloatRingBuffer(window + hop)
     private val executor = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "FieldLink-RX-FTX").apply { priority = Thread.NORM_PRIORITY }
     }
     private val busy = AtomicBoolean(false)
     private val closed = AtomicBoolean(false)
     private val recent = mutableMapOf<String, Long>()
-    private var nextFt8 = FT8_WINDOW.toLong()
-    private var nextFt4 = FT4_WINDOW.toLong()
+    private var nextDecode = window.toLong()
+
+    init {
+        require(selectedMode == DecodeMode.FT8 || selectedMode == DecodeMode.FT4) {
+            "An FT8 or FT4 decoder must be selected."
+        }
+    }
 
     override fun process(samples: FloatArray, spectrum: SpectrumAnalysis?) {
         val reduced = decimator.process(samples)
         if (reduced.isEmpty()) return
         ring.append(reduced)
 
-        var ft8Due = false
-        while (ring.endSample >= nextFt8) {
-            ft8Due = true
-            nextFt8 += FT8_HOP
+        var due = false
+        while (ring.endSample >= nextDecode) {
+            due = true
+            nextDecode += hop
         }
-        var ft4Due = false
-        while (ring.endSample >= nextFt4) {
-            ft4Due = true
-            nextFt4 += FT4_HOP
-        }
-        if (!ft8Due && !ft4Due) return
+        if (!due || ring.size < window) return
         if (!busy.compareAndSet(false, true)) return
-
-        val work = Work(
-            ft8 = if (ft8Due && ring.size >= FT8_WINDOW) ring.copy(ring.endSample - FT8_WINDOW, FT8_WINDOW) else null,
-            ft4 = if (ft4Due && ring.size >= FT4_WINDOW) ring.copy(ring.endSample - FT4_WINDOW, FT4_WINDOW) else null,
-        )
+        val capture = ring.copy(ring.endSample - window, window)
         executor.execute {
             try {
-                val combined = buildList {
-                    work.ft8?.let { samples ->
-                        NativeFtxBridge.decode(samples, DecodeModeKey.FT8, MAXIMUM_MESSAGES)
-                            .forEach { add(DecodeMode.FT8 to it) }
-                    }
-                    work.ft4?.let { samples ->
-                        NativeFtxBridge.decode(samples, DecodeModeKey.FT4, MAXIMUM_MESSAGES)
-                            .forEach { add(DecodeMode.FT4 to it) }
-                    }
-                }
-                combined.sortedByDescending { it.second.score }
+                NativeFtxBridge.decode(capture, nativeMode, MAXIMUM_MESSAGES)
+                    .sortedByDescending { it.score }
                     .take(MAXIMUM_MESSAGES)
-                    .forEach { (mode, result) -> emitResult(mode, result) }
+                    .forEach(::emitResult)
             } finally {
                 busy.set(false)
             }
         }
     }
 
-    private fun emitResult(mode: DecodeMode, result: NativeFtxResult) {
+    private fun emitResult(result: NativeFtxResult) {
         val now = System.currentTimeMillis()
         synchronized(recent) {
             recent.entries.removeAll { now - it.value > 30_000L }
         }
         if (closed.get()) return
-        val identity = "${mode.name}:${result.text}:${result.frequencyHz.roundToInt()}"
+        val identity = "${selectedMode.name}:${result.text}:${result.frequencyHz.roundToInt()}"
         val duplicate = synchronized(recent) {
             val previous = recent[identity]
             recent[identity] = now
@@ -99,7 +85,7 @@ class FtxLiveDecoder(
         val quality = ((result.score - 8) / 24f).coerceIn(0.15f, 1f)
         emit(
             DecodedMessage(
-                mode = mode,
+                mode = selectedMode,
                 text = result.text,
                 audioFrequencyHz = result.frequencyHz,
                 quality = quality,

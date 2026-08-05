@@ -18,12 +18,15 @@ import kotlin.math.cos
 
 class FieldLinkStreamDecoder(
     private val password: CharArray,
+    selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
 ) : AudioDecoder {
     companion object {
         private const val CENTER_HZ = 1_500.0
         private const val PREAMBLE_SYMBOLS = 32
-        private const val MIN_PREAMBLE_MATCHES = 27
+        // The desktop modem accepts 75 % of the 32-symbol preamble. Matching
+        // the receiver to that threshold improves microphone-path tolerance.
+        private const val MIN_PREAMBLE_MATCHES = 24
         private const val BUFFER_SAMPLES = 2_200_000
     }
 
@@ -175,7 +178,9 @@ class FieldLinkStreamDecoder(
                 offsets = intArrayOf(-12, -8, -4, 0, 4, 8, 12),
             ),
         ),
-    )
+    ).filter { it.profile.mode == selectedMode }.also {
+        require(it.size == 1) { "A FieldLink Fast or Wide decoder must be selected." }
+    }
 
     override fun process(samples: FloatArray, spectrum: SpectrumAnalysis?) {
         ring.append(samples)

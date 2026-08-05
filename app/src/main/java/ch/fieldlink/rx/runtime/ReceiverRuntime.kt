@@ -22,7 +22,7 @@ object ReceiverRuntime {
     private val mutableState = MutableStateFlow(ReceiverState())
     val state: StateFlow<ReceiverState> = mutableState.asStateFlow()
 
-    fun configure(passwordText: String, selectedInputId: Int?) {
+    fun configure(passwordText: String, selectedInputId: Int?, selectedMode: DecodeMode) {
         require(passwordText.length >= 16) { "The group password must contain at least 16 characters." }
         synchronized(lock) {
             password?.fill('\u0000')
@@ -32,6 +32,7 @@ object ReceiverRuntime {
             it.copy(
                 phase = ReceiverPhase.STARTING,
                 selectedInputId = selectedInputId,
+                selectedMode = selectedMode,
                 error = null,
             )
         }
@@ -50,6 +51,10 @@ object ReceiverRuntime {
 
     fun selectInput(id: Int) {
         mutableState.update { it.copy(selectedInputId = id) }
+    }
+
+    fun selectMode(mode: DecodeMode) {
+        mutableState.update { it.copy(selectedMode = mode) }
     }
 
     fun listening() {
@@ -107,6 +112,7 @@ object ReceiverRuntime {
         mutableState.update {
             it.copy(
                 phase = ReceiverPhase.NEEDS_PASSWORD,
+                selectedMode = null,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
                 partialTexts = emptyMap(),

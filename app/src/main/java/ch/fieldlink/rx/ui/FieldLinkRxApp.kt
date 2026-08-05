@@ -63,6 +63,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ch.fieldlink.rx.R
 import ch.fieldlink.rx.model.AudioInput
 import ch.fieldlink.rx.model.Coordinates
+import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
 import ch.fieldlink.rx.model.ReceiverState
@@ -75,7 +76,8 @@ import java.time.format.DateTimeFormatter
 fun FieldLinkRxApp(
     onRefreshInputs: () -> Unit,
     onSelectInput: (Int) -> Unit,
-    onStart: (String, Int?) -> Unit,
+    onSelectMode: (DecodeMode) -> Unit,
+    onStart: (String, Int?, DecodeMode) -> Unit,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
 ) {
@@ -104,6 +106,7 @@ fun FieldLinkRxApp(
                 state = state,
                 onRefreshInputs = onRefreshInputs,
                 onSelectInput = onSelectInput,
+                onSelectMode = onSelectMode,
                 onStart = onStart,
                 modifier = Modifier.padding(padding),
             )
@@ -122,12 +125,14 @@ private fun SetupScreen(
     state: ReceiverState,
     onRefreshInputs: () -> Unit,
     onSelectInput: (Int) -> Unit,
-    onStart: (String, Int?) -> Unit,
+    onSelectMode: (DecodeMode) -> Unit,
+    onStart: (String, Int?, DecodeMode) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    var modeMenuOpen by remember { mutableStateOf(false) }
     val selected = state.inputs.firstOrNull { it.id == state.selectedInputId }
 
     LaunchedEffect(Unit) { onRefreshInputs() }
@@ -140,6 +145,24 @@ private fun SetupScreen(
     ) {
         Text(stringResource(R.string.session_title), style = MaterialTheme.typography.headlineSmall)
         Text(stringResource(R.string.session_explanation), style = MaterialTheme.typography.bodyMedium)
+
+        Text(stringResource(R.string.choose_decoder), style = MaterialTheme.typography.titleMedium)
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { modeMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(state.selectedMode?.let { modeLabel(it) } ?: stringResource(R.string.decoder_not_selected))
+            }
+            DropdownMenu(expanded = modeMenuOpen, onDismissRequest = { modeMenuOpen = false }) {
+                DecodeMode.entries.forEach { mode ->
+                    DropdownMenuItem(
+                        text = { Text(modeLabel(mode)) },
+                        onClick = {
+                            onSelectMode(mode)
+                            modeMenuOpen = false
+                        },
+                    )
+                }
+            }
+        }
 
         OutlinedTextField(
             value = password,
@@ -183,9 +206,11 @@ private fun SetupScreen(
         state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.weight(1f))
         Button(
-            onClick = { onStart(password, state.selectedInputId) },
+            onClick = {
+                state.selectedMode?.let { mode -> onStart(password, state.selectedInputId, mode) }
+            },
             modifier = Modifier.fillMaxWidth(),
-            enabled = password.length >= 16 && state.selectedInputId != null,
+            enabled = password.length >= 16 && state.selectedInputId != null && state.selectedMode != null,
         ) {
             Text(stringResource(R.string.start_reception))
         }
@@ -238,8 +263,11 @@ private fun ReceiverOverview(
                 Text(state.inputs.firstOrNull { it.id == state.selectedInputId }?.let(::inputLabel).orEmpty())
                 Text("${stringResource(R.string.signal_level)}: ${"%.1f".format(state.signal.rmsDb)} dBFS")
                 Text("${stringResource(R.string.audio_frequency)}: ${"%.1f".format(state.signal.peakFrequencyHz)} Hz")
-                Text(stringResource(R.string.active_decoders), style = MaterialTheme.typography.bodySmall)
-                Text(stringResource(R.string.pending_decoders), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                Text(
+                    "${stringResource(R.string.selected_decoder)}: " +
+                        (state.selectedMode?.let { modeLabel(it) } ?: stringResource(R.string.decoder_not_selected)),
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
@@ -334,6 +362,21 @@ private fun phaseText(phase: ReceiverPhase): String = when (phase) {
     ReceiverPhase.ERROR -> stringResource(R.string.service_error)
     else -> stringResource(R.string.reception_stopped)
 }
+
+@Composable
+private fun modeLabel(mode: DecodeMode): String = stringResource(
+    when (mode) {
+        DecodeMode.FIELDLINK_FAST -> R.string.mode_fieldlink_fast
+        DecodeMode.FIELDLINK_WIDE -> R.string.mode_fieldlink_wide
+        DecodeMode.CW -> R.string.mode_cw
+        DecodeMode.RTTY -> R.string.mode_rtty
+        DecodeMode.PSK31 -> R.string.mode_psk31
+        DecodeMode.PSK63 -> R.string.mode_psk63
+        DecodeMode.FT8 -> R.string.mode_ft8
+        DecodeMode.FT4 -> R.string.mode_ft4
+        DecodeMode.JS8 -> R.string.mode_js8
+    },
+)
 
 private fun inputLabel(input: AudioInput): String = "${input.productName} · ${input.typeName}"
 

@@ -74,10 +74,18 @@ class ReceiverService : Service() {
         }
 
         val inputId = ReceiverRuntime.state.value.selectedInputId
+        val selectedMode = ReceiverRuntime.state.value.selectedMode
+        if (selectedMode == null) {
+            ReceiverRuntime.error("The receiver was started without a selected decoder.")
+            password.fill('\u0000')
+            stopReceiver()
+            return
+        }
         executor.execute {
             try {
                 val decoder = DecoderCoordinator(
                     password = password,
+                    selectedMode = selectedMode,
                     onMessage = ::onDecodedMessage,
                 )
                 coordinator = decoder
@@ -199,4 +207,3 @@ class ReceiverService : Service() {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
 }
-

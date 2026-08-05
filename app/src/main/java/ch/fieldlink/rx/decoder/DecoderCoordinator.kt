@@ -8,6 +8,7 @@ import ch.fieldlink.rx.runtime.ReceiverRuntime
 
 class DecoderCoordinator(
     password: CharArray,
+    selectedMode: DecodeMode,
     private val onMessage: (DecodedMessage) -> Unit,
 ) : AutoCloseable {
     private data class DecoderSlot(
@@ -20,22 +21,27 @@ class DecoderCoordinator(
     private val spectrumAnalyzer = SpectrumAnalyzer()
     private var latestSpectrum: SpectrumAnalysis? = null
     private val decoders = listOf(
-        DecoderSlot("FieldLink", FieldLinkStreamDecoder(password.copyOf(), onMessage)),
-        DecoderSlot(
-            "CW",
-            CwDecoder(onMessage) { text -> ReceiverRuntime.partial(DecodeMode.CW, text) },
-        ),
-        DecoderSlot(
-            "RTTY",
-            RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(DecodeMode.RTTY, text) },
-        ),
-        DecoderSlot(
-            "PSK",
-            PskDecoder(onMessage) { mode, text -> ReceiverRuntime.partial(mode, text) },
-        ),
-        DecoderSlot("FT8/FT4", FtxLiveDecoder(onMessage)),
-        DecoderSlot("JS8Call", Js8LiveDecoder(onMessage)),
+        DecoderSlot(selectedMode.displayName, decoderFor(selectedMode, password)),
     )
+
+    private fun decoderFor(mode: DecodeMode, password: CharArray): AudioDecoder = when (mode) {
+        DecodeMode.FIELDLINK_FAST,
+        DecodeMode.FIELDLINK_WIDE -> FieldLinkStreamDecoder(password.copyOf(), mode, onMessage)
+
+        DecodeMode.CW -> CwDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
+        DecodeMode.RTTY -> RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
+        DecodeMode.PSK31,
+        DecodeMode.PSK63 -> PskDecoder(mode, onMessage) { activeMode, text -> ReceiverRuntime.partial(activeMode, text) }
+
+        DecodeMode.FT8,
+        DecodeMode.FT4 -> FtxLiveDecoder(mode, onMessage)
+
+        DecodeMode.JS8 -> Js8LiveDecoder(onMessage)
+    }.also {
+        if (mode != DecodeMode.FIELDLINK_FAST && mode != DecodeMode.FIELDLINK_WIDE) {
+            password.fill('\u0000')
+        }
+    }
 
     fun process(samples: FloatArray) {
         val analysis = spectrumAnalyzer.add(samples)

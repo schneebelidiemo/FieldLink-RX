@@ -13,6 +13,7 @@ import kotlin.math.hypot
 import kotlin.math.sin
 
 class PskDecoder(
+    selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
     private val partial: (DecodeMode, String) -> Unit,
 ) : AudioDecoder {
@@ -153,7 +154,9 @@ class PskDecoder(
     private val rates = listOf(
         RateDecoder(DecodeMode.PSK31, symbolSamples = 1_536),
         RateDecoder(DecodeMode.PSK63, symbolSamples = 768),
-    )
+    ).filter { it.mode == selectedMode }.also {
+        require(it.size == 1) { "A PSK31 or PSK63 decoder must be selected." }
+    }
     private var carrierHz: Double? = null
     private var lastCarrierMillis = 0L
 

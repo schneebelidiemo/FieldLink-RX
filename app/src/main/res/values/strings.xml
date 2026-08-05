@@ -25,6 +25,9 @@
     <string name="action_map">Google Maps</string>
     <string name="audio_input">Audio input</string>
     <string name="choose_audio_input">Select an audio input manually</string>
+    <string name="choose_decoder">Select one decoder</string>
+    <string name="selected_decoder">Selected decoder</string>
+    <string name="decoder_not_selected">No decoder selected</string>
     <string name="built_in_microphone">Built-in microphone</string>
     <string name="signal_level">Level</string>
     <string name="audio_frequency">Audio frequency</string>

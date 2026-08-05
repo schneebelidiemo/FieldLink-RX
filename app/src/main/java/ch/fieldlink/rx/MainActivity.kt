@@ -9,6 +9,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import ch.fieldlink.rx.audio.AudioInputRepository
 import ch.fieldlink.rx.audio.ReceiverService
+import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import ch.fieldlink.rx.ui.FieldLinkRxApp
 import ch.fieldlink.rx.ui.FieldLinkRxTheme
@@ -16,6 +17,7 @@ import ch.fieldlink.rx.ui.FieldLinkRxTheme
 class MainActivity : ComponentActivity() {
     private var pendingPassword: String? = null
     private var pendingInputId: Int? = null
+    private var pendingMode: DecodeMode? = null
 
     private val microphonePermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -38,6 +40,7 @@ class MainActivity : ComponentActivity() {
                 FieldLinkRxApp(
                     onRefreshInputs = ::refreshInputs,
                     onSelectInput = ReceiverRuntime::selectInput,
+                    onSelectMode = ReceiverRuntime::selectMode,
                     onStart = ::requestStart,
                     onStop = { ReceiverService.stop(this) },
                     onNewSession = ReceiverRuntime::requireNewPassword,
@@ -55,9 +58,10 @@ class MainActivity : ComponentActivity() {
         ReceiverRuntime.setInputs(AudioInputRepository.list(this))
     }
 
-    private fun requestStart(password: String, inputId: Int?) {
+    private fun requestStart(password: String, inputId: Int?, mode: DecodeMode) {
         pendingPassword = password
         pendingInputId = inputId
+        pendingMode = mode
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
@@ -76,10 +80,11 @@ class MainActivity : ComponentActivity() {
     private fun beginPendingSession() {
         val password = pendingPassword ?: return
         val inputId = pendingInputId
+        val mode = pendingMode ?: return
         pendingPassword = null
         pendingInputId = null
-        ReceiverRuntime.configure(password, inputId)
+        pendingMode = null
+        ReceiverRuntime.configure(password, inputId, mode)
         ReceiverService.start(this)
     }
 }
-

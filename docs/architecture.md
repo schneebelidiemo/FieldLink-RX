@@ -3,7 +3,8 @@
 1. `MainActivity` collects the session password and runtime permissions.
 2. `ReceiverService` owns `AudioRecord` and remains visible through an Android microphone
    foreground-service notification.
-3. `DecoderCoordinator` computes one shared spectrum and sends PCM blocks to the enabled decoders.
+3. `DecoderCoordinator` computes one shared spectrum and sends PCM blocks only to the single
+   decoder selected on the start screen.
 4. `ReceiverRuntime` exposes immutable state to the Compose UI and keeps message history in memory.
 5. Message actions use Android intents for copy, share and Google Maps.
 6. `FtxLiveDecoder` downsamples to 12 kHz, evaluates overlapping FT8/FT4 receive windows on a

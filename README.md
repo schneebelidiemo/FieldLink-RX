@@ -19,7 +19,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.3.0 |
+| Mode | Status in 0.3.1 |
 | --- | --- |
 | FieldLink Fast/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Live adaptive decoder, results include confidence |
@@ -30,6 +30,12 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 This table is intentionally strict: a mode is not marked complete until it decodes reference audio
 and over-the-air audio on an Android phone.
+
+Exactly one decoder is selected manually before reception. FieldLink Fast and FieldLink Wide are
+separate choices, as are CW, RTTY, PSK31, PSK63, FT8, FT4 and JS8Call. This prevents unrelated
+decoders from consuming CPU or influencing the selected mode's live processing. The FieldLink
+preamble threshold matches the desktop transmitter and an encrypted desktop-compatible audio
+round-trip is covered by the Android unit tests.
 
 ## Build
 
