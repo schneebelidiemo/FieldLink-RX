@@ -20,6 +20,7 @@ class FieldLinkStreamDecoder(
     private val password: CharArray,
     selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
+    private val diagnostic: ((String) -> Unit)? = null,
 ) : AudioDecoder {
     companion object {
         private const val CENTER_HZ = 1_500.0
@@ -90,6 +91,7 @@ class FieldLinkStreamDecoder(
                                 confidence += value.confidence
                             }
                             if (matches >= MIN_PREAMBLE_MATCHES) {
+                                diagnostic?.invoke("preamble:${profile.mode.name}:$matches")
                                 pending = Candidate(
                                     start = history.first.start,
                                     offsetHz = if (confidence > 0.0) weightedOffset / confidence else 0.0,
@@ -192,23 +194,27 @@ class FieldLinkStreamDecoder(
     }
 
     private fun decodeFrame(frame: DecodedFrame) {
+        diagnostic?.invoke("frame:${frame.mode.name}")
         try {
             val block = FieldLinkFec.decode(frame.bits)
             val packet = FieldLinkPacketCodec.fixedBlockToPacket(block)
             val envelope = assembler.add(packet) ?: return
             when (val result = FieldLinkMessageCodec.decode(envelope, packet.messageId, password)) {
-                is FieldLinkDecodeResult.Success -> emit(
-                    DecodedMessage(
-                        id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
-                        mode = frame.mode,
-                        text = result.body.text.orEmpty().ifBlank { result.body.kind },
-                        callsign = result.body.callsign,
-                        coordinates = result.body.coordinates,
-                        audioFrequencyHz = frame.centerFrequencyHz,
-                        quality = frame.quality,
-                        uncertain = frame.quality < 0.72f,
-                    ),
-                )
+                is FieldLinkDecodeResult.Success -> {
+                    diagnostic?.invoke("success:${frame.mode.name}")
+                    emit(
+                        DecodedMessage(
+                            id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                            mode = frame.mode,
+                            text = result.body.text.orEmpty().ifBlank { result.body.kind },
+                            callsign = result.body.callsign,
+                            coordinates = result.body.coordinates,
+                            audioFrequencyHz = frame.centerFrequencyHz,
+                            quality = frame.quality,
+                            uncertain = frame.quality < 0.72f,
+                        ),
+                    )
+                }
                 is FieldLinkDecodeResult.EncryptedWithoutKey -> emit(
                     DecodedMessage(
                         id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
@@ -228,6 +234,7 @@ class FieldLinkStreamDecoder(
     }
 
     private fun emitDamaged(frame: DecodedFrame, reason: String) {
+        diagnostic?.invoke("damaged:${frame.mode.name}:$reason")
         emit(
             DecodedMessage(
                 mode = frame.mode,

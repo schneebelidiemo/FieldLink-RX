@@ -61,6 +61,15 @@ jobs:
       - name: Unit tests and lint
         run: gradle --no-daemon testDebugUnitTest lintDebug
 
+      - name: Upload test reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FieldLink-RX-test-reports
+          path: app/build/reports/tests/testDebugUnitTest
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Build installable test APK
         run: |
           gradle --no-daemon assembleDebug

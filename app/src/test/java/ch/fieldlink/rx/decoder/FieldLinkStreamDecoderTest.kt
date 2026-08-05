@@ -5,7 +5,11 @@ import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.protocol.Crc32
 import ch.fieldlink.rx.protocol.FieldLinkCipher
 import ch.fieldlink.rx.protocol.FieldLinkCrypto
+import ch.fieldlink.rx.protocol.FieldLinkDecodeResult
 import ch.fieldlink.rx.protocol.FieldLinkFec
+import ch.fieldlink.rx.protocol.FieldLinkMessageCodec
+import ch.fieldlink.rx.protocol.FieldLinkPacketCodec
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -33,23 +37,37 @@ class FieldLinkStreamDecoderTest {
         )
         val payloads = envelope.asList().chunked(96).map { it.toByteArray() }
         val messages = mutableListOf<DecodedMessage>()
+        val diagnostics = mutableListOf<String>()
         val decoder = FieldLinkStreamDecoder(
             password = password.toCharArray(),
             selectedMode = DecodeMode.FIELDLINK_FAST,
             emit = messages::add,
+            diagnostic = diagnostics::add,
         )
 
         payloads.forEachIndexed { index, payload ->
             val fixedBlock = packetBlock(messageId, index, payloads.size, payload)
-            val audio = modulateFast(FieldLinkFec.encode(fixedBlock))
+            val encoded = FieldLinkFec.encode(fixedBlock)
+            assertArrayEquals("FEC round-trip failed for packet $index", fixedBlock, FieldLinkFec.decode(encoded))
+            val packet = FieldLinkPacketCodec.fixedBlockToPacket(fixedBlock)
+            assertEquals(index, packet.index)
+            assertArrayEquals(payload, packet.payload)
+            val audio = modulateFast(encoded)
             audio.asList().chunked(2_048).forEach { chunk ->
                 decoder.process(chunk.toFloatArray(), null)
             }
         }
         decoder.close()
 
+        val direct = FieldLinkMessageCodec.decode(envelope, messageId, password.toCharArray())
+        assertEquals("Direct AES decode failed", "TEST OK", (direct as? FieldLinkDecodeResult.Success)?.body?.text)
+
         val decoded = messages.firstOrNull { it.text == "TEST OK" }
-        assertNotNull(decoded)
+        assertNotNull(
+            "Diagnostics: $diagnostics; live audio produced: " +
+                messages.joinToString { "${it.text} (${it.quality})" },
+            decoded,
+        )
         assertEquals("HB9ABC", decoded?.callsign)
         assertFalse(decoded?.encryptedWithoutKey ?: true)
     }
