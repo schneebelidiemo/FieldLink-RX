@@ -33,6 +33,7 @@ class DecoderCoordinator(
             "PSK",
             PskDecoder(onMessage) { mode, text -> ReceiverRuntime.partial(mode, text) },
         ),
+        DecoderSlot("FT8/FT4", FtxLiveDecoder(onMessage)),
     )
 
     fun process(samples: FloatArray) {
@@ -58,4 +59,3 @@ class DecoderCoordinator(
         decoders.forEach { slot -> runCatching { slot.decoder.close() } }
     }
 }
-
