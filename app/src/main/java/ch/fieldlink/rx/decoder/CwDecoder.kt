@@ -72,7 +72,8 @@ class CwDecoder(
         private var timingScore = 0.65f
         private var signalScore = 0.65f
         private var noiseFloorDb = -96.0
-        private var lastToneConfidence = 0.0f
+        private var markConfidenceSum = 0.0f
+        private var markConfidenceSamples = 0
         private var emittedAfterSilence = false
 
         fun update(block: FloatArray, settings: CwSettings) {
@@ -94,7 +95,7 @@ class CwDecoder(
             val hysteresis = if (toneOn) 1.5 else 0.0
             val nextOn = ratioDb >= narrowbandRequiredDb - hysteresis && toneDb >= levelThreshold - hysteresis
 
-            lastToneConfidence = (
+            val toneConfidence = (
                 ((ratioDb - narrowbandRequiredDb + 8.0) / 16.0) * 0.55 +
                     ((toneDb - levelThreshold + 12.0) / 24.0) * 0.45
                 ).toFloat().coerceIn(0f, 1f)
@@ -102,6 +103,10 @@ class CwDecoder(
             noiseFloorDb = noiseFloorDb * (1.0 - noiseRate) + sideDb * noiseRate
 
             stateTicks += 1
+            if (nextOn) {
+                markConfidenceSum += toneConfidence
+                markConfidenceSamples += 1
+            }
             if (nextOn == toneOn) {
                 if (!toneOn && stateTicks >= settings.messageGapSeconds.coerceIn(1, 15) * 100) {
                     finalizeTransmission()
@@ -134,6 +139,7 @@ class CwDecoder(
         }
 
         private fun onMarkEnded(ticks: Int, settings: CwSettings) {
+            val markConfidence = consumeMarkConfidence()
             val maximumDotTicks = 120.0 / MIN_WPM
             val maximumMarkTicks = ceil(maximumDotTicks * 3.8).toInt()
             if (ticks !in 1..maximumMarkTicks) {
@@ -169,8 +175,19 @@ class CwDecoder(
                 }
             }.coerceIn(0.0, 1.0)
             timingScore = timingScore * 0.86f + timingQuality.toFloat() * 0.14f
-            signalScore = signalScore * 0.86f + lastToneConfidence * 0.14f
+            signalScore = signalScore * 0.86f + markConfidence * 0.14f
             emittedAfterSilence = false
+        }
+
+        private fun consumeMarkConfidence(): Float {
+            val average = if (markConfidenceSamples == 0) {
+                0.0f
+            } else {
+                markConfidenceSum / markConfidenceSamples
+            }
+            markConfidenceSum = 0.0f
+            markConfidenceSamples = 0
+            return average
         }
 
         private fun onGapEnded(ticks: Int, settings: CwSettings) {
