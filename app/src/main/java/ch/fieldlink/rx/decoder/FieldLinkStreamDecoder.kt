@@ -196,12 +196,12 @@ class FieldLinkStreamDecoder(
     private val detectors = listOf(
         ModeDetector(
             Profile(
-                mode = DecodeMode.FIELDLINK_FAST,
-                tones = 16,
-                bitsPerSymbol = 4,
-                spacingHz = 100.0,
-                symbolSamples = 480,
-                offsets = intArrayOf(-60, -30, 0, 30, 60),
+                mode = DecodeMode.FIELDLINK_MEDIUM,
+                tones = 8,
+                bitsPerSymbol = 3,
+                spacingHz = 50.0,
+                symbolSamples = 960,
+                offsets = intArrayOf(-20, -10, 0, 10, 20),
             ),
         ),
         ModeDetector(
@@ -215,7 +215,7 @@ class FieldLinkStreamDecoder(
             ),
         ),
     ).filter { it.profile.mode == selectedMode }.also {
-        require(it.size == 1) { "A FieldLink Fast or Wide decoder must be selected." }
+        require(it.size == 1) { "A FieldLink Medium or Wide decoder must be selected." }
     }
 
     override fun process(samples: FloatArray, spectrum: SpectrumAnalysis?) {
@@ -329,7 +329,7 @@ class FieldLinkStreamDecoder(
         var previous = 0.0
         var previousPrevious = 0.0
         // A rectangular symbol window is deliberate: FieldLink tone spacing is
-        // exactly one Fourier bin (100 Hz/10 ms or 20 Hz/50 ms). A Hann window
+        // exactly one Fourier bin (50 Hz/20 ms or 20 Hz/50 ms). A Hann window
         // broadens the main lobe across adjacent MFSK tones.
         for (sample in samples) {
             val current = sample + coefficient * previous - previousPrevious

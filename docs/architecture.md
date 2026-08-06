@@ -24,7 +24,7 @@ the remaining decoders. Spectrum rendering is throttled independently from audio
 
 - A decoder needs reproducible reference-vector tests.
 - A decoder needs noisy and frequency-offset audio tests.
-- FieldLink must remain byte-compatible with protocol draft 0.1.
+- FieldLink must remain byte-compatible with protocol draft 0.2 (Medium/Wide).
 - Background capture must survive screen lock on at least two Android 14+ devices.
 - No release APK may contain a transmission permission or audio-output modem path.
 - The JS8Call gate additionally requires reference captures for all five submodes and real-device

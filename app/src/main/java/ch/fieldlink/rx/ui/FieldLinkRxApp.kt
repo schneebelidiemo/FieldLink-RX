@@ -419,7 +419,7 @@ private fun phaseText(phase: ReceiverPhase): String = when (phase) {
 }
 
 private fun DecodeMode?.isFieldLink(): Boolean =
-    this == DecodeMode.FIELDLINK_FAST || this == DecodeMode.FIELDLINK_WIDE
+    this == DecodeMode.FIELDLINK_MEDIUM || this == DecodeMode.FIELDLINK_WIDE
 
 @Composable
 private fun captureSourceLabel(source: AudioCaptureSource): String = stringResource(
@@ -462,7 +462,7 @@ private fun captureModeLabel(mode: AudioCaptureMode): String = stringResource(
 @Composable
 private fun modeLabel(mode: DecodeMode): String = stringResource(
     when (mode) {
-        DecodeMode.FIELDLINK_FAST -> R.string.mode_fieldlink_fast
+        DecodeMode.FIELDLINK_MEDIUM -> R.string.mode_fieldlink_medium
         DecodeMode.FIELDLINK_WIDE -> R.string.mode_fieldlink_wide
         DecodeMode.CW -> R.string.mode_cw
         DecodeMode.RTTY -> R.string.mode_rtty

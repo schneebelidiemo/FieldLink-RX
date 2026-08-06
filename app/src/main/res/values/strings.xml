@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">FieldLink RX</string>
     <string name="session_title">Start receiver</string>
-    <string name="session_explanation">Choose one decoder and an audio input. A password is only used for encrypted FieldLink Fast or Wide messages and is never stored.</string>
+    <string name="session_explanation">Choose one decoder and an audio input. A password is only used for encrypted FieldLink Medium or Wide messages and is never stored.</string>
     <string name="password_label">FieldLink password (optional)</string>
     <string name="password_minimum">Leave empty for unencrypted FieldLink; otherwise enter at least 16 characters</string>
     <string name="start_reception">Start reception</string>
@@ -59,7 +59,7 @@
     <string name="copy_success">Message copied</string>
     <string name="service_error">Receiver error</string>
     <string name="input_disconnected">Selected audio input is no longer available.</string>
-    <string name="mode_fieldlink_fast">FieldLink Fast</string>
+    <string name="mode_fieldlink_medium">FieldLink Medium</string>
     <string name="mode_fieldlink_wide">FieldLink Wide</string>
     <string name="mode_cw">CW/Morse</string>
     <string name="mode_rtty">RTTY</string>

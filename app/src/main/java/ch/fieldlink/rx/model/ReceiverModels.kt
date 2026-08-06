@@ -4,7 +4,7 @@ import java.time.Instant
 import java.util.UUID
 
 enum class DecodeMode(val displayName: String) {
-    FIELDLINK_FAST("FieldLink Fast"),
+    FIELDLINK_MEDIUM("FieldLink Medium"),
     FIELDLINK_WIDE("FieldLink Wide"),
     CW("CW/Morse"),
     RTTY("RTTY"),

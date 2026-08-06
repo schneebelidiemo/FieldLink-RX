@@ -25,7 +25,7 @@ import kotlin.math.sin
 
 class FieldLinkStreamDecoderTest {
     @Test
-    fun `recognizes and decrypts desktop-compatible fast audio`() {
+    fun `recognizes and decrypts desktop-compatible medium audio`() {
         val password = "0123456789abcdef"
         val messageId = byteArrayOf(1, 2, 3, 4, 5, 6, 7, 8)
         val plaintext = """{"version":1,"kind":"message","callsign":"HB9ABC","text":"TEST OK"}"""
@@ -37,7 +37,7 @@ class FieldLinkStreamDecoderTest {
             password = password.toCharArray(),
             compressed = false,
         )
-        val (messages, diagnostics) = decodeFast(envelope, messageId, password.toCharArray())
+        val (messages, diagnostics) = decodeMedium(envelope, messageId, password.toCharArray())
 
         val direct = FieldLinkMessageCodec.decode(envelope, messageId, password.toCharArray())
         assertEquals("Direct AES decode failed", "TEST OK", (direct as? FieldLinkDecodeResult.Success)?.body?.text)
@@ -66,7 +66,7 @@ class FieldLinkStreamDecoderTest {
             compressed = false,
         )
 
-        val (messages, diagnostics) = decodeFast(
+        val (messages, diagnostics) = decodeMedium(
             envelope = envelope,
             messageId = messageId,
             password = CharArray(0),
@@ -91,14 +91,14 @@ class FieldLinkStreamDecoderTest {
             compressed = false,
         )
 
-        val (messages, diagnostics) = decodeFast(envelope, messageId, CharArray(0))
+        val (messages, diagnostics) = decodeMedium(envelope, messageId, CharArray(0))
 
         assertEquals(1, messages.size)
         assertEquals(true, messages.single().encryptedWithoutKey)
         assertEquals(DecoderStage.ENCRYPTED, diagnostics.last().stage)
     }
 
-    private fun decodeFast(
+    private fun decodeMedium(
         envelope: ByteArray,
         messageId: ByteArray,
         password: CharArray,
@@ -109,7 +109,7 @@ class FieldLinkStreamDecoderTest {
         val diagnostics = mutableListOf<DecoderDiagnostic>()
         val decoder = FieldLinkStreamDecoder(
             password = password,
-            selectedMode = DecodeMode.FIELDLINK_FAST,
+            selectedMode = DecodeMode.FIELDLINK_MEDIUM,
             emit = messages::add,
             diagnostic = diagnostics::add,
         )
@@ -120,8 +120,9 @@ class FieldLinkStreamDecoderTest {
             assertArrayEquals("FEC round-trip failed for packet $index", fixedBlock, FieldLinkFec.decode(encoded))
             val packet = FieldLinkPacketCodec.fixedBlockToPacket(fixedBlock)
             assertEquals(index, packet.index)
+            assertEquals(DecodeMode.FIELDLINK_MEDIUM, packet.mode)
             assertArrayEquals(payload, packet.payload)
-            audioTransform(modulateFast(encoded)).asList().chunked(2_048).forEach { chunk ->
+            audioTransform(modulateMedium(encoded)).asList().chunked(2_048).forEach { chunk ->
                 decoder.process(chunk.toFloatArray(), null)
             }
         }
@@ -156,7 +157,7 @@ class FieldLinkStreamDecoderTest {
             .put('F'.code.toByte())
             .put('P'.code.toByte())
             .put(1.toByte())
-            .put(1.toByte()) // FieldLink Fast
+            .put(1.toByte()) // FieldLink Medium
             .put(messageId)
             .putShort(index.toShort())
             .putShort(count.toShort())
@@ -174,14 +175,14 @@ class FieldLinkStreamDecoderTest {
         }
     }
 
-    private fun modulateFast(bits: ByteArray): FloatArray {
-        val tones = 16
-        val bitsPerSymbol = 4
-        val symbolSamples = 480
+    private fun modulateMedium(bits: ByteArray): FloatArray {
+        val tones = 8
+        val bitsPerSymbol = 3
+        val symbolSamples = 960
         val leadSamples = 7_200
         val preamble = IntArray(32).also { values ->
             for (index in 0 until 24) values[index] = if (index % 2 == 0) 0 else tones - 1
-            intArrayOf(1, 14, 2, 13, 3, 12, 4, 11).copyInto(values, 24)
+            intArrayOf(1, 6, 2, 5, 3, 4, 4, 3).copyInto(values, 24)
         }
         val data = IntArray((bits.size + bitsPerSymbol - 1) / bitsPerSymbol)
         for (symbol in data.indices) {
@@ -197,7 +198,7 @@ class FieldLinkStreamDecoderTest {
         var offset = leadSamples
         var phase = 0.0
         symbols.forEach { tone ->
-            val frequency = 1_500.0 + (tone - (tones - 1) / 2.0) * 100.0
+            val frequency = 1_500.0 + (tone - (tones - 1) / 2.0) * 50.0
             val phaseStep = 2.0 * PI * frequency / 48_000.0
             repeat(symbolSamples) { sample ->
                 val edge = min(1.0, min(sample / 12.0, (symbolSamples - sample - 1) / 12.0))

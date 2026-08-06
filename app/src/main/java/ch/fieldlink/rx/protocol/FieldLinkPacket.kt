@@ -38,7 +38,7 @@ object FieldLinkPacketCodec {
             "FieldLink packet CRC failed."
         }
         val mode = when (bytes[3].toInt() and 0xff) {
-            1 -> DecodeMode.FIELDLINK_FAST
+            1 -> DecodeMode.FIELDLINK_MEDIUM
             2 -> DecodeMode.FIELDLINK_WIDE
             else -> error("Unknown FieldLink transmission mode.")
         }
@@ -87,4 +87,3 @@ class FieldLinkPacketAssembler {
         return result.toByteArray()
     }
 }
-

@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">FieldLink RX</string>
     <string name="session_title">Empfänger starten</string>
-    <string name="session_explanation">Wähle einen Decoder und einen Audioeingang. Ein Passwort wird nur für verschlüsselte Nachrichten in FieldLink Schnell oder Weit verwendet und nie gespeichert.</string>
+    <string name="session_explanation">Wähle einen Decoder und einen Audioeingang. Ein Passwort wird nur für verschlüsselte Nachrichten in FieldLink Mittel oder Weit verwendet und nie gespeichert.</string>
     <string name="password_label">FieldLink-Passwort (optional)</string>
     <string name="password_minimum">Für unverschlüsseltes FieldLink leer lassen, sonst mindestens 16 Zeichen eingeben</string>
     <string name="start_reception">Empfang starten</string>
@@ -59,7 +59,7 @@
     <string name="copy_success">Nachricht kopiert</string>
     <string name="service_error">Empfängerfehler</string>
     <string name="input_disconnected">Der ausgewählte Audioeingang ist nicht mehr verfügbar.</string>
-    <string name="mode_fieldlink_fast">FieldLink Schnell</string>
+    <string name="mode_fieldlink_medium">FieldLink Mittel</string>
     <string name="mode_fieldlink_wide">FieldLink Weit</string>
     <string name="mode_cw">CW/Morse</string>
     <string name="mode_rtty">RTTY</string>

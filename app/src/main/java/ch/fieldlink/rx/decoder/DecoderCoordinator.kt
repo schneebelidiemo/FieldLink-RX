@@ -25,7 +25,7 @@ class DecoderCoordinator(
     )
 
     private fun decoderFor(mode: DecodeMode, password: CharArray): AudioDecoder = when (mode) {
-        DecodeMode.FIELDLINK_FAST,
+        DecodeMode.FIELDLINK_MEDIUM,
         DecodeMode.FIELDLINK_WIDE -> FieldLinkStreamDecoder(
             password = password.copyOf(),
             selectedMode = mode,
@@ -43,7 +43,7 @@ class DecoderCoordinator(
 
         DecodeMode.JS8 -> Js8LiveDecoder(onMessage)
     }.also {
-        if (mode != DecodeMode.FIELDLINK_FAST && mode != DecodeMode.FIELDLINK_WIDE) {
+        if (mode != DecodeMode.FIELDLINK_MEDIUM && mode != DecodeMode.FIELDLINK_WIDE) {
             password.fill('\u0000')
         }
     }

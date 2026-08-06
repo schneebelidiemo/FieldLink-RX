@@ -19,9 +19,9 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.3.3 |
+| Mode | Status in 0.4.0 |
 | --- | --- |
-| FieldLink Fast/Wide | Protocol-compatible decoder core; live synchronizer under validation |
+| FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Live adaptive decoder, results include confidence |
 | RTTY | Live 45.45 baud / 170 Hz Baudot decoder, experimental |
 | PSK31/PSK63 | Decoder interface and signal classifier, experimental |
@@ -31,16 +31,20 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 This table is intentionally strict: a mode is not marked complete until it decodes reference audio
 and over-the-air audio on an Android phone.
 
-Exactly one decoder is selected manually before reception. FieldLink Fast and FieldLink Wide are
+Exactly one decoder is selected manually before reception. FieldLink Medium and FieldLink Wide are
 separate choices, as are CW, RTTY, PSK31, PSK63, FT8, FT4 and JS8Call. This prevents unrelated
 decoders from consuming CPU or influencing the selected mode's live processing. The FieldLink
 preamble synchronizer checks eight timing phases and validates the unique final eight-tone sync word
 separately from the alternating lead-in. The UI reports both values. Encrypted, unencrypted,
 missing-password and simulated speaker-to-microphone round-trips are covered by Android unit tests.
-The password field is shown only for FieldLink Fast/Wide and may be left empty for cleartext
+The password field is shown only for FieldLink Medium/Wide and may be left empty for cleartext
 reception; all other decoders always receive without a password. Android microphone processing is
 manually selectable between standard microphone, voice-recognition path, automatic and unprocessed
 capture where supported.
+
+Medium replaces the earlier experimental Fast profile. It uses 8-MFSK, 50 Hz tone spacing and
+20 ms symbols, giving about 400 Hz occupied width and 14.7 seconds per packet. The longer symbols
+are intended to survive an SSB radio chain while remaining substantially faster than Wide.
 
 ## Build
 
