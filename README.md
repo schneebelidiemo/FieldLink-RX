@@ -19,10 +19,10 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.4.0 |
+| Mode | Status in 0.4.1 |
 | --- | --- |
 | FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
-| CW/Morse | Live adaptive decoder, results include confidence |
+| CW/Morse | Adaptive 3-track decoder with dynamic noise floor, 3–60 WPM, tone/sensitivity controls and confidence |
 | RTTY | Live 45.45 baud / 170 Hz Baudot decoder, experimental |
 | PSK31/PSK63 | Decoder interface and signal classifier, experimental |
 | FT8/FT4 | Native ARM64 live decoder with overlapping windows and reference-vector tests |
@@ -41,6 +41,13 @@ The password field is shown only for FieldLink Medium/Wide and may be left empty
 reception; all other decoders always receive without a password. Android microphone processing is
 manually selectable between standard microphone, voice-recognition path, automatic and unprocessed
 capture where supported.
+
+CW reception follows up to three signals separated by at least 40 Hz. Automatic tone search covers
+300–1000 Hz; manual tuning covers 200–1500 Hz. Speed, sensitivity and the 1–15 second message gap
+are adjustable on the waterfall screen and persist across starts. Normal text becomes visible after
+three valid characters. Shorter fragments are stored as uncertain with a trailing `?`, but do not
+create a background notification. Amateur-radio prosigns `<AR>`, `<SK>`, `<BT>` and `<KN>` are
+recognized.
 
 Medium replaces the earlier experimental Fast profile. It uses 8-MFSK, 50 Hz tone spacing and
 20 ms symbols, giving about 400 Hz occupied width and 14.7 seconds per packet. The longer symbols

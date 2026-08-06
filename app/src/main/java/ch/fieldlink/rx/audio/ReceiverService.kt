@@ -126,6 +126,7 @@ class ReceiverService : Service() {
 
     private fun onDecodedMessage(message: DecodedMessage) {
         if (!ReceiverRuntime.addMessage(message)) return
+        if (message.mode == ch.fieldlink.rx.model.DecodeMode.CW && message.uncertain) return
         val manager = getSystemService(NotificationManager::class.java)
         manager.notify(
             MESSAGE_ID_BASE + (message.id.hashCode() and 0x7ff),

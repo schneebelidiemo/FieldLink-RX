@@ -21,7 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Map
@@ -42,6 +44,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -65,6 +69,8 @@ import ch.fieldlink.rx.model.AudioInput
 import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.AudioCaptureSource
 import ch.fieldlink.rx.model.Coordinates
+import ch.fieldlink.rx.model.CwSettings
+import ch.fieldlink.rx.model.CwTrackSnapshot
 import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.DecoderDiagnostic
 import ch.fieldlink.rx.model.DecoderStage
@@ -74,6 +80,7 @@ import ch.fieldlink.rx.model.ReceiverState
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +89,7 @@ fun FieldLinkRxApp(
     onSelectInput: (Int) -> Unit,
     onSelectMode: (DecodeMode) -> Unit,
     onSelectAudioCaptureMode: (AudioCaptureMode) -> Unit,
+    onUpdateCwSettings: (CwSettings) -> Unit,
     onStart: (String, Int?, DecodeMode, AudioCaptureMode) -> Unit,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
@@ -120,6 +128,7 @@ fun FieldLinkRxApp(
                 state = state,
                 onStop = onStop,
                 onNewSession = onNewSession,
+                onUpdateCwSettings = onUpdateCwSettings,
                 modifier = Modifier.padding(padding),
             )
         }
@@ -260,13 +269,20 @@ private fun ReceiverScreen(
     state: ReceiverState,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
+    onUpdateCwSettings: (CwSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
         val wide = maxWidth >= 720.dp
         if (wide) {
             Row(Modifier.fillMaxSize().padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                ReceiverOverview(state, onStop, onNewSession, Modifier.weight(1f).fillMaxHeight())
+                ReceiverOverview(
+                    state,
+                    onStop,
+                    onNewSession,
+                    onUpdateCwSettings,
+                    Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                )
                 MessageList(state, Modifier.weight(1f).fillMaxHeight())
             }
         } else {
@@ -275,7 +291,7 @@ private fun ReceiverScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item { ReceiverOverview(state, onStop, onNewSession, Modifier.fillMaxWidth()) }
+                item { ReceiverOverview(state, onStop, onNewSession, onUpdateCwSettings, Modifier.fillMaxWidth()) }
                 item { MessageHeader(state.messages.size) }
                 if (state.messages.isEmpty()) item { Text(stringResource(R.string.no_messages)) }
                 items(state.messages, key = { it.id }) { MessageCard(it) }
@@ -289,6 +305,7 @@ private fun ReceiverOverview(
     state: ReceiverState,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
+    onUpdateCwSettings: (CwSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -329,7 +346,12 @@ private fun ReceiverOverview(
 
         Waterfall(state.waterfall, Modifier.fillMaxWidth())
 
-        state.partialTexts.filterValues { it.isNotBlank() }.forEach { (mode, text) ->
+        if (state.selectedMode == DecodeMode.CW) {
+            CwControls(state.cwSettings, onUpdateCwSettings)
+            state.cwTracks.forEachIndexed { index, track -> CwTrackCard(index + 1, track) }
+        }
+
+        state.partialTexts.filterKeys { it != DecodeMode.CW }.filterValues { it.isNotBlank() }.forEach { (mode, text) ->
             Card {
                 Column(Modifier.fillMaxWidth().padding(12.dp)) {
                     Text(mode.displayName, style = MaterialTheme.typography.labelLarge)
@@ -348,6 +370,106 @@ private fun ReceiverOverview(
             Button(onClick = onNewSession, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.new_session))
             }
+        }
+    }
+}
+
+@Composable
+private fun CwControls(settings: CwSettings, onUpdate: (CwSettings) -> Unit) {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.cw_settings), style = MaterialTheme.typography.titleMedium)
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.cw_speed_automatic))
+                Switch(
+                    checked = settings.automaticSpeed,
+                    onCheckedChange = { onUpdate(settings.copy(automaticSpeed = it)) },
+                )
+            }
+            Text(
+                if (settings.automaticSpeed) stringResource(R.string.cw_speed_range)
+                else stringResource(R.string.cw_manual_wpm, settings.manualWpm),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!settings.automaticSpeed) {
+                Slider(
+                    value = settings.manualWpm.toFloat(),
+                    onValueChange = { onUpdate(settings.copy(manualWpm = it.roundToInt().coerceIn(3, 60))) },
+                    valueRange = 3f..60f,
+                    steps = 56,
+                )
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.cw_tone_automatic))
+                Switch(
+                    checked = settings.automaticTone,
+                    onCheckedChange = { onUpdate(settings.copy(automaticTone = it)) },
+                )
+            }
+            Text(
+                if (settings.automaticTone) stringResource(R.string.cw_tone_range)
+                else stringResource(R.string.cw_manual_tone, settings.manualToneHz),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (!settings.automaticTone) {
+                Slider(
+                    value = settings.manualToneHz.toFloat(),
+                    onValueChange = {
+                        val rounded = (it / 10f).roundToInt() * 10
+                        onUpdate(settings.copy(manualToneHz = rounded.coerceIn(200, 1_500)))
+                    },
+                    valueRange = 200f..1_500f,
+                )
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.cw_noise_automatic))
+                Switch(
+                    checked = settings.automaticNoiseThreshold,
+                    onCheckedChange = { onUpdate(settings.copy(automaticNoiseThreshold = it)) },
+                )
+            }
+            Text(stringResource(R.string.cw_sensitivity), style = MaterialTheme.typography.bodySmall)
+            Slider(
+                value = settings.sensitivity.toFloat(),
+                onValueChange = { onUpdate(settings.copy(sensitivity = it.roundToInt().coerceIn(0, 100))) },
+                valueRange = 0f..100f,
+                steps = 99,
+            )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(stringResource(R.string.cw_less_sensitive), style = MaterialTheme.typography.labelSmall)
+                Text(stringResource(R.string.cw_more_sensitive), style = MaterialTheme.typography.labelSmall)
+            }
+
+            Text(
+                stringResource(R.string.cw_message_gap, settings.messageGapSeconds),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Slider(
+                value = settings.messageGapSeconds.toFloat(),
+                onValueChange = { onUpdate(settings.copy(messageGapSeconds = it.roundToInt().coerceIn(1, 15))) },
+                valueRange = 1f..15f,
+                steps = 13,
+            )
+        }
+    }
+}
+
+@Composable
+private fun CwTrackCard(index: Int, track: CwTrackSnapshot) {
+    val displayText = if (track.text.isBlank()) stringResource(R.string.cw_detecting) else track.text
+    Card {
+        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text(
+                "CW $index · ${track.frequencyHz.roundToInt()} Hz · ${track.speedWpm.roundToInt()} WPM · ${(track.quality * 100).roundToInt()} %",
+                style = MaterialTheme.typography.labelLarge,
+            )
+            Text(
+                displayText,
+                style = MaterialTheme.typography.bodyLarge,
+            )
         }
     }
 }
@@ -388,6 +510,9 @@ private fun MessageCard(message: DecodedMessage) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AssistChip(onClick = {}, label = { Text("${"%.1f".format(message.audioFrequencyHz)} Hz") })
                 AssistChip(onClick = {}, label = { Text("${(message.quality * 100).toInt()} %") })
+                message.speedWpm?.let { speed ->
+                    AssistChip(onClick = {}, label = { Text("${speed.roundToInt()} WPM") })
+                }
                 if (message.uncertain) AssistChip(onClick = {}, label = { Text(stringResource(R.string.uncertain)) })
             }
             message.coordinates?.let { coordinates ->

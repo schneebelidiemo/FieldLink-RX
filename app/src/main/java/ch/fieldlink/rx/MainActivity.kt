@@ -11,6 +11,7 @@ import ch.fieldlink.rx.audio.AudioInputRepository
 import ch.fieldlink.rx.audio.ReceiverService
 import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.AudioCaptureMode
+import ch.fieldlink.rx.model.CwSettings
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import ch.fieldlink.rx.ui.FieldLinkRxApp
 import ch.fieldlink.rx.ui.FieldLinkRxTheme
@@ -20,6 +21,7 @@ class MainActivity : ComponentActivity() {
     private var pendingInputId: Int? = null
     private var pendingMode: DecodeMode? = null
     private var pendingAudioCaptureMode: AudioCaptureMode? = null
+    private val cwPreferences by lazy { getSharedPreferences("cw_settings", MODE_PRIVATE) }
 
     private val microphonePermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -36,6 +38,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        ReceiverRuntime.updateCwSettings(loadCwSettings())
         refreshInputs()
         setContent {
             FieldLinkRxTheme {
@@ -44,6 +47,7 @@ class MainActivity : ComponentActivity() {
                     onSelectInput = ReceiverRuntime::selectInput,
                     onSelectMode = ReceiverRuntime::selectMode,
                     onSelectAudioCaptureMode = ReceiverRuntime::selectAudioCaptureMode,
+                    onUpdateCwSettings = ::saveCwSettings,
                     onStart = ::requestStart,
                     onStop = { ReceiverService.stop(this) },
                     onNewSession = ReceiverRuntime::requireNewPassword,
@@ -59,6 +63,29 @@ class MainActivity : ComponentActivity() {
 
     private fun refreshInputs() {
         ReceiverRuntime.setInputs(AudioInputRepository.list(this))
+    }
+
+    private fun loadCwSettings(): CwSettings = CwSettings(
+        automaticSpeed = cwPreferences.getBoolean("automatic_speed", true),
+        manualWpm = cwPreferences.getInt("manual_wpm", 18).coerceIn(3, 60),
+        automaticTone = cwPreferences.getBoolean("automatic_tone", true),
+        manualToneHz = cwPreferences.getInt("manual_tone_hz", 700).coerceIn(200, 1_500),
+        automaticNoiseThreshold = cwPreferences.getBoolean("automatic_noise", true),
+        sensitivity = cwPreferences.getInt("sensitivity", 50).coerceIn(0, 100),
+        messageGapSeconds = cwPreferences.getInt("message_gap_seconds", 3).coerceIn(1, 15),
+    )
+
+    private fun saveCwSettings(settings: CwSettings) {
+        ReceiverRuntime.updateCwSettings(settings)
+        cwPreferences.edit()
+            .putBoolean("automatic_speed", settings.automaticSpeed)
+            .putInt("manual_wpm", settings.manualWpm)
+            .putBoolean("automatic_tone", settings.automaticTone)
+            .putInt("manual_tone_hz", settings.manualToneHz)
+            .putBoolean("automatic_noise", settings.automaticNoiseThreshold)
+            .putInt("sensitivity", settings.sensitivity)
+            .putInt("message_gap_seconds", settings.messageGapSeconds)
+            .apply()
     }
 
     private fun requestStart(

@@ -33,7 +33,11 @@ class DecoderCoordinator(
             diagnostic = ReceiverRuntime::decoderDiagnostic,
         )
 
-        DecodeMode.CW -> CwDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
+        DecodeMode.CW -> CwDecoder(
+            emit = onMessage,
+            settingsProvider = { ReceiverRuntime.state.value.cwSettings },
+            status = ReceiverRuntime::cwTracks,
+        )
         DecodeMode.RTTY -> RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
         DecodeMode.PSK31,
         DecodeMode.PSK63 -> PskDecoder(mode, onMessage) { activeMode, text -> ReceiverRuntime.partial(activeMode, text) }

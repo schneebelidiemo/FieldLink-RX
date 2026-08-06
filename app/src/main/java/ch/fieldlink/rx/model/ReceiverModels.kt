@@ -32,6 +32,24 @@ data class DecodedMessage(
     val uncertain: Boolean,
     val complete: Boolean = true,
     val encryptedWithoutKey: Boolean = false,
+    val speedWpm: Double? = null,
+)
+
+data class CwSettings(
+    val automaticSpeed: Boolean = true,
+    val manualWpm: Int = 18,
+    val automaticTone: Boolean = true,
+    val manualToneHz: Int = 700,
+    val automaticNoiseThreshold: Boolean = true,
+    val sensitivity: Int = 50,
+    val messageGapSeconds: Int = 3,
+)
+
+data class CwTrackSnapshot(
+    val frequencyHz: Double,
+    val speedWpm: Double,
+    val quality: Float,
+    val text: String,
 )
 
 data class AudioInput(
@@ -107,6 +125,8 @@ data class ReceiverState(
     val waterfall: List<SpectrumFrame> = emptyList(),
     val messages: List<DecodedMessage> = emptyList(),
     val partialTexts: Map<DecodeMode, String> = emptyMap(),
+    val cwSettings: CwSettings = CwSettings(),
+    val cwTracks: List<CwTrackSnapshot> = emptyList(),
     val captureInfo: AudioCaptureInfo? = null,
     val decoderDiagnostic: DecoderDiagnostic = DecoderDiagnostic(),
     val error: String? = null,

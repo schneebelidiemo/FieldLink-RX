@@ -4,6 +4,8 @@ import ch.fieldlink.rx.model.AudioInput
 import ch.fieldlink.rx.model.AudioCaptureInfo
 import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.CwSettings
+import ch.fieldlink.rx.model.CwTrackSnapshot
 import ch.fieldlink.rx.model.DecoderDiagnostic
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
@@ -48,6 +50,7 @@ object ReceiverRuntime {
                 waterfall = emptyList(),
                 messages = emptyList(),
                 partialTexts = emptyMap(),
+                cwTracks = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
                 error = null,
@@ -76,6 +79,14 @@ object ReceiverRuntime {
 
     fun selectAudioCaptureMode(mode: AudioCaptureMode) {
         mutableState.update { it.copy(audioCaptureMode = mode) }
+    }
+
+    fun updateCwSettings(settings: CwSettings) {
+        mutableState.update { it.copy(cwSettings = settings) }
+    }
+
+    fun cwTracks(tracks: List<CwTrackSnapshot>) {
+        mutableState.update { it.copy(cwTracks = tracks.take(3)) }
     }
 
     fun listening() {
@@ -129,6 +140,7 @@ object ReceiverRuntime {
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
                 partialTexts = emptyMap(),
+                cwTracks = emptyList(),
                 messages = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
@@ -148,6 +160,7 @@ object ReceiverRuntime {
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
                 partialTexts = emptyMap(),
+                cwTracks = emptyList(),
                 messages = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
