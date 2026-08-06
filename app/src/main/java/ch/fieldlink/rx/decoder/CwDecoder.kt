@@ -217,7 +217,7 @@ class CwDecoder(
                         text = rendered,
                         audioFrequencyHz = frequencyHz,
                         quality = quality,
-                        uncertain = shortFragment || invalidCharacters > 0 || quality < 0.65f,
+                        uncertain = shortFragment || invalidCharacters > 0 || quality < 0.55f,
                         complete = !shortFragment,
                         speedWpm = speedWpm(),
                     ),
