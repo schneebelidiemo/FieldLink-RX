@@ -14,6 +14,7 @@ import ch.fieldlink.rx.MainActivity
 import ch.fieldlink.rx.R
 import ch.fieldlink.rx.decoder.DecoderCoordinator
 import ch.fieldlink.rx.model.AudioInputKind
+import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import ch.fieldlink.rx.sdr.RtlSdrInput
