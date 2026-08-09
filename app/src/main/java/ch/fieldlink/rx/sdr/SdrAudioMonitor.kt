@@ -2,7 +2,6 @@ package ch.fieldlink.rx.sdr
 
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioManager
 import android.media.AudioTrack
 import kotlin.math.max
 
@@ -43,7 +42,6 @@ internal class SdrAudioMonitor : AutoCloseable {
             )
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(max(minimum * 2, 16_384))
-            .setSessionId(AudioManager.AUDIO_SESSION_ID_GENERATE)
             .build()
     }
 
