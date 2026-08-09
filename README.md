@@ -20,7 +20,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.5.2 |
+| Mode | Status in 0.5.3 |
 | --- | --- |
 | FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Adaptive 3-track decoder with dynamic noise floor, 3–60 WPM, tone/sensitivity controls and confidence |
@@ -60,6 +60,8 @@ Select `RTL-SDR – V4` under **Audio source**, grant Android USB access, and st
 page provides a 2.4 MS/s RF waterfall, manual frequency entry with 100 Hz steps, USB/LSB/CW/AM/NFM/WFM
 demodulation, automatic or manual bandwidth and gain, PPM correction, squelch, and a muted-by-default
 audio monitor. The supported hardware tuning range is 500 kHz to 1.766 GHz.
+FieldLink Medium preamble acquisition corrects a common carrier error of roughly ±300 Hz before
+decoding the packet, while the full 3 kHz USB/LSB audio passband preserves all eight modem tones.
 
 The implementation opens the Android USB file descriptor directly. It does not use rtl_tcp, does not
 request Internet access, and does not record I/Q or audio. SDR settings are intentionally reset when

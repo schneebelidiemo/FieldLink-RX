@@ -70,7 +70,7 @@ class SdrDemodulator(
         var outputCount = 0
         var powerSum = 0.0
         var powerCount = 0
-        val rfCutoff = (settings.bandwidthHz / 2.0)
+        val rfCutoff = rfCutoff(settings)
             .coerceIn(250.0, inputSampleRate * 0.45)
         val rfAlpha = 1.0 - exp(-2.0 * PI * rfCutoff / inputSampleRate)
         val audioCutoff = audioCutoff(settings)
@@ -172,10 +172,16 @@ class SdrDemodulator(
 
     private fun audioCutoff(settings: SdrSettings): Double = when (settings.modulation) {
         SdrModulation.USB,
-        SdrModulation.LSB -> (settings.bandwidthHz / 2.0).coerceIn(300.0, 12_000.0)
+        SdrModulation.LSB -> settings.bandwidthHz.toDouble().coerceIn(300.0, 12_000.0)
         SdrModulation.CW -> (settings.bandwidthHz / 2.0).coerceIn(200.0, 2_000.0)
         SdrModulation.AM -> (settings.bandwidthHz / 2.0).coerceIn(1_000.0, 10_000.0)
         SdrModulation.NFM -> (settings.bandwidthHz / 2.0).coerceIn(2_500.0, 12_000.0)
         SdrModulation.WFM -> 15_000.0
+    }
+
+    private fun rfCutoff(settings: SdrSettings): Double = when (settings.modulation) {
+        SdrModulation.USB,
+        SdrModulation.LSB -> settings.bandwidthHz.toDouble()
+        else -> settings.bandwidthHz / 2.0
     }
 }

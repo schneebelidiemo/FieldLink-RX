@@ -98,11 +98,36 @@ class FieldLinkStreamDecoderTest {
         assertEquals(DecoderStage.ENCRYPTED, diagnostics.last().stage)
     }
 
+    @Test
+    fun `decodes medium with a two hundred hertz SDR carrier error`() {
+        val messageId = byteArrayOf(3, 1, 4, 1, 5, 9, 2, 6)
+        val plaintext = """{"version":1,"kind":"message","callsign":"HB3TGD","text":"SDR OFFSET"}"""
+            .toByteArray(Charsets.UTF_8)
+        val envelope = FieldLinkCrypto.seal(
+            plaintext = plaintext,
+            messageId = messageId,
+            cipher = FieldLinkCipher.NONE,
+            password = CharArray(0),
+            compressed = false,
+        )
+
+        val (messages, diagnostics) = decodeMedium(
+            envelope = envelope,
+            messageId = messageId,
+            password = CharArray(0),
+            centerOffsetHz = 200.0,
+        )
+
+        assertEquals("SDR OFFSET", messages.single().text)
+        assertEquals(DecoderStage.SUCCESS, diagnostics.last().stage)
+    }
+
     private fun decodeMedium(
         envelope: ByteArray,
         messageId: ByteArray,
         password: CharArray,
         audioTransform: (FloatArray) -> FloatArray = { it },
+        centerOffsetHz: Double = 0.0,
     ): Pair<List<DecodedMessage>, List<DecoderDiagnostic>> {
         val payloads = envelope.asList().chunked(96).map { it.toByteArray() }
         val messages = mutableListOf<DecodedMessage>()
@@ -122,7 +147,7 @@ class FieldLinkStreamDecoderTest {
             assertEquals(index, packet.index)
             assertEquals(DecodeMode.FIELDLINK_MEDIUM, packet.mode)
             assertArrayEquals(payload, packet.payload)
-            audioTransform(modulateMedium(encoded)).asList().chunked(2_048).forEach { chunk ->
+            audioTransform(modulateMedium(encoded, centerOffsetHz)).asList().chunked(2_048).forEach { chunk ->
                 decoder.process(chunk.toFloatArray(), null)
             }
         }
@@ -175,7 +200,7 @@ class FieldLinkStreamDecoderTest {
         }
     }
 
-    private fun modulateMedium(bits: ByteArray): FloatArray {
+    private fun modulateMedium(bits: ByteArray, centerOffsetHz: Double = 0.0): FloatArray {
         val tones = 8
         val bitsPerSymbol = 3
         val symbolSamples = 960
@@ -198,7 +223,7 @@ class FieldLinkStreamDecoderTest {
         var offset = leadSamples
         var phase = 0.0
         symbols.forEach { tone ->
-            val frequency = 1_500.0 + (tone - (tones - 1) / 2.0) * 50.0
+            val frequency = 1_500.0 + centerOffsetHz + (tone - (tones - 1) / 2.0) * 50.0
             val phaseStep = 2.0 * PI * frequency / 48_000.0
             repeat(symbolSamples) { sample ->
                 val edge = min(1.0, min(sample / 12.0, (symbolSamples - sample - 1) / 12.0))

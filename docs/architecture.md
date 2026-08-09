@@ -22,6 +22,9 @@
    by the microphone path. Frequency, tuner gain and PPM changes briefly stop the asynchronous USB
    stream, apply the synchronous hardware control outside libusb's transfer callback, then restart
    reception. No TCP server, socket, recording or Internet permission is present.
+9. FieldLink preamble acquisition first estimates a common integer tone displacement and residual
+   frequency error, then verifies all 32 preamble symbols with one fixed correction. Medium accepts
+   roughly ±300 Hz so normal SDR/radio oscillator and dial errors do not destroy the unique sync.
 
 The receiver thread never performs UI work. Decoder errors are isolated from Android lifecycle
 management. RF and audio spectrum rendering are throttled independently from decoding.

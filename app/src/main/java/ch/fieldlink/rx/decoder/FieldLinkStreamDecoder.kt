@@ -34,6 +34,9 @@ class FieldLinkStreamDecoder(
         private const val DIAGNOSTIC_PREAMBLE_MATCHES = 12
         private const val PHASE_COUNT = 8
         private const val BUFFER_SAMPLES = 2_200_000
+        private const val MAX_COARSE_TONE_SHIFT = 6
+        private const val MIN_COARSE_ALTERNATING_MATCHES = 10
+        private const val MIN_COARSE_SYNC_MATCHES = 3
     }
 
     private data class Profile(
@@ -58,6 +61,13 @@ class FieldLinkStreamDecoder(
         val tone: Int,
         val offsetHz: Int,
         val confidence: Float,
+        val samples: FloatArray = FloatArray(0),
+    )
+
+    private data class CoarseAlignment(
+        val toneShift: Int,
+        val offsetRemainderHz: Double,
+        val score: Double,
     )
 
     private data class Candidate(
@@ -85,47 +95,17 @@ class FieldLinkStreamDecoder(
                 while (next + profile.symbolSamples <= ring.endSample) {
                     nextStarts[phase] = next + profile.symbolSamples
                     if (next >= ignoreBefore) {
-                        val detection = detectTone(ring.copy(next, profile.symbolSamples), next, profile)
+                        val samples = ring.copy(next, profile.symbolSamples)
+                        val detection = detectTone(samples, next, profile).copy(samples = samples)
                         val history = histories[phase]
                         history.addLast(detection)
                         while (history.size > PREAMBLE_SYMBOLS) history.removeFirst()
                         if (history.size == PREAMBLE_SYMBOLS) {
-                            var alternatingMatches = 0
-                            var syncMatches = 0
-                            var weightedOffset = 0.0
-                            var confidence = 0.0
-                            history.forEachIndexed { index, value ->
-                                if (value.tone == profile.pattern[index]) {
-                                    if (index < 24) alternatingMatches += 1 else syncMatches += 1
-                                    weightedOffset += value.offsetHz * value.confidence
-                                    confidence += value.confidence
-                                }
-                            }
-                            val matches = alternatingMatches + syncMatches
-                            if (matches >= DIAGNOSTIC_PREAMBLE_MATCHES && matches > bestReportedMatches) {
-                                bestReportedMatches = matches
-                                diagnostic?.invoke(
-                                    DecoderDiagnostic(
-                                        stage = DecoderStage.PREAMBLE,
-                                        preambleMatches = matches,
-                                        syncMatches = syncMatches,
-                                    ),
-                                )
-                            }
-                            if (
-                                alternatingMatches >= MIN_ALTERNATING_MATCHES &&
-                                syncMatches >= MIN_SYNC_MATCHES
+                            val candidate = evaluateHistory(history)
+                            if (candidate != null &&
+                                (bestCandidate == null || candidate.score > bestCandidate.score)
                             ) {
-                                val averageConfidence = if (matches > 0) confidence / matches else 0.0
-                                val candidate = Candidate(
-                                    start = history.first.start,
-                                    offsetHz = if (confidence > 0.0) weightedOffset / confidence else 0.0,
-                                    preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
-                                    score = syncMatches * 10.0 + alternatingMatches + averageConfidence,
-                                )
-                                if (bestCandidate == null || candidate.score > bestCandidate.score) {
-                                    bestCandidate = candidate
-                                }
+                                bestCandidate = candidate
                             }
                         }
                     }
@@ -137,6 +117,83 @@ class FieldLinkStreamDecoder(
                 histories.forEach { it.clear() }
                 bestReportedMatches = 0
             }
+        }
+
+        private fun evaluateHistory(history: ArrayDeque<ToneDetection>): Candidate? {
+            var bestAlignment: CoarseAlignment? = null
+            for (toneShift in -MAX_COARSE_TONE_SHIFT..MAX_COARSE_TONE_SHIFT) {
+                var alternatingAvailable = 0
+                var alternatingMatches = 0
+                var syncAvailable = 0
+                var syncMatches = 0
+                var weightedRemainder = 0.0
+                var confidenceSum = 0.0
+                history.forEachIndexed { index, value ->
+                    val shiftedTone = profile.pattern[index] + toneShift
+                    if (shiftedTone !in 0 until profile.tones) return@forEachIndexed
+                    if (index < 24) alternatingAvailable += 1 else syncAvailable += 1
+                    if (value.tone == shiftedTone) {
+                        if (index < 24) alternatingMatches += 1 else syncMatches += 1
+                        weightedRemainder += value.offsetHz * value.confidence
+                        confidenceSum += value.confidence
+                    }
+                }
+                if (
+                    alternatingMatches < minOf(MIN_COARSE_ALTERNATING_MATCHES, alternatingAvailable) ||
+                    syncAvailable < MIN_COARSE_SYNC_MATCHES ||
+                    syncMatches < minOf(MIN_COARSE_SYNC_MATCHES, syncAvailable)
+                ) {
+                    continue
+                }
+                val remainder = if (confidenceSum > 0.0) weightedRemainder / confidenceSum else 0.0
+                val score = syncMatches * 20.0 + alternatingMatches + confidenceSum
+                if (bestAlignment == null || score > bestAlignment.score) {
+                    bestAlignment = CoarseAlignment(toneShift, remainder, score)
+                }
+            }
+
+            val alignment = bestAlignment ?: return null
+            val fixedOffsetHz = alignment.toneShift * profile.spacingHz + alignment.offsetRemainderHz
+            var alternatingMatches = 0
+            var syncMatches = 0
+            var confidence = 0.0
+            history.forEachIndexed { index, value ->
+                if (value.samples.isEmpty()) return null
+                val corrected = detectTone(
+                    samples = value.samples,
+                    absoluteStart = value.start,
+                    profile = profile,
+                    fixedOffsetHz = fixedOffsetHz,
+                )
+                if (corrected.tone == profile.pattern[index]) {
+                    if (index < 24) alternatingMatches += 1 else syncMatches += 1
+                    confidence += corrected.confidence
+                }
+            }
+            val matches = alternatingMatches + syncMatches
+            if (matches >= DIAGNOSTIC_PREAMBLE_MATCHES && matches > bestReportedMatches) {
+                bestReportedMatches = matches
+                diagnostic?.invoke(
+                    DecoderDiagnostic(
+                        stage = DecoderStage.PREAMBLE,
+                        preambleMatches = matches,
+                        syncMatches = syncMatches,
+                    ),
+                )
+            }
+            if (
+                alternatingMatches < MIN_ALTERNATING_MATCHES ||
+                syncMatches < MIN_SYNC_MATCHES
+            ) {
+                return null
+            }
+            val averageConfidence = if (matches > 0) confidence / matches else 0.0
+            return Candidate(
+                start = history.first.start,
+                offsetHz = fixedOffsetHz,
+                preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
+                score = syncMatches * 10.0 + alternatingMatches + averageConfidence,
+            )
         }
 
         fun decodeReady(): DecodedFrame? {

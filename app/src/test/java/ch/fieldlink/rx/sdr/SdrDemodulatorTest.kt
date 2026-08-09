@@ -30,6 +30,23 @@ class SdrDemodulatorTest {
     }
 
     @Test
+    fun `USB preserves both edges of the FieldLink tone band`() {
+        val lowTone = decode(
+            modulation = SdrModulation.USB,
+            iq = complexTone(-tunerOffset + 1_325, 200_000),
+        )
+        val highTone = decode(
+            modulation = SdrModulation.USB,
+            iq = complexTone(-tunerOffset + 1_675, 200_000),
+        )
+
+        assertEquals(1_325.0, estimateFrequency(lowTone), 45.0)
+        assertEquals(1_675.0, estimateFrequency(highTone), 45.0)
+        val levelRatio = rms(highTone) / rms(lowTone).coerceAtLeast(1e-9)
+        assertTrue("FieldLink upper tone was attenuated: ratio=$levelRatio", levelRatio > 0.85)
+    }
+
+    @Test
     fun `CW adds a stable 700 Hz receiver pitch`() {
         val audio = decode(
             modulation = SdrModulation.CW,
@@ -112,5 +129,12 @@ class SdrDemodulatorTest {
         }
         val seconds = (samples.size - start).toDouble() / SdrDemodulator.OUTPUT_SAMPLE_RATE
         return crossings / (2.0 * seconds)
+    }
+
+    private fun rms(samples: FloatArray): Double {
+        val start = samples.size / 3
+        var sum = 0.0
+        for (index in start until samples.size) sum += samples[index] * samples[index]
+        return kotlin.math.sqrt(sum / (samples.size - start).coerceAtLeast(1))
     }
 }
