@@ -32,3 +32,17 @@ only `core/src/decoder/legacy_decoder.cpp` and the protocol decoding sources.
 The upstream engine, transmit modulator, rig control, networking, storage and
 Android audio adapters are excluded from the application build. The upstream
 license and notices remain available inside the pinned submodule.
+
+## RTL-SDR Android receiver source
+
+FieldLink RX builds the Android libusb and librtlsdr receiver sources from
+`martinmarinov/rtl_tcp_andro-` commit
+`304dc37f1cd7a5c3a42ad6b4af497b7f93d96505`.
+
+- Upstream: https://github.com/martinmarinov/rtl_tcp_andro-
+- Copyright: Signalware Ltd, Osmocom RTL-SDR contributors, libusb contributors
+- License: GPL-2.0-or-later for the Android RTL-SDR modifications; bundled
+  libusb files retain their upstream license
+
+Only the Android libusb and RTL-SDR receiver libraries are compiled. The
+rtl_tcp server, sockets and network transport are not included in FieldLink RX.

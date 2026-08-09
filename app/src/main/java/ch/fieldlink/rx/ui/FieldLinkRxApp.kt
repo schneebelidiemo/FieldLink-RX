@@ -26,7 +26,11 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
@@ -68,6 +72,7 @@ import ch.fieldlink.rx.R
 import ch.fieldlink.rx.model.AudioInput
 import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.AudioCaptureSource
+import ch.fieldlink.rx.model.AudioInputKind
 import ch.fieldlink.rx.model.Coordinates
 import ch.fieldlink.rx.model.CwSettings
 import ch.fieldlink.rx.model.CwTrackSnapshot
@@ -77,6 +82,8 @@ import ch.fieldlink.rx.model.DecoderStage
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
 import ch.fieldlink.rx.model.ReceiverState
+import ch.fieldlink.rx.model.SdrModulation
+import ch.fieldlink.rx.model.SdrSettings
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -90,6 +97,7 @@ fun FieldLinkRxApp(
     onSelectMode: (DecodeMode) -> Unit,
     onSelectAudioCaptureMode: (AudioCaptureMode) -> Unit,
     onUpdateCwSettings: (CwSettings) -> Unit,
+    onUpdateSdrSettings: (SdrSettings) -> Unit,
     onStart: (String, Int?, DecodeMode, AudioCaptureMode) -> Unit,
     onStop: () -> Unit,
     onNewSession: () -> Unit,
@@ -129,6 +137,7 @@ fun FieldLinkRxApp(
                 onStop = onStop,
                 onNewSession = onNewSession,
                 onUpdateCwSettings = onUpdateCwSettings,
+                onUpdateSdrSettings = onUpdateSdrSettings,
                 modifier = Modifier.padding(padding),
             )
         }
@@ -206,7 +215,7 @@ private fun SetupScreen(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) {
                 OutlinedButton(onClick = { menuOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                    Text(selected?.let(::inputLabel) ?: stringResource(R.string.audio_input))
+                    Text(selected?.let { inputLabel(it) } ?: stringResource(R.string.audio_input))
                 }
                 DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                     state.inputs.forEach { input ->
@@ -225,20 +234,22 @@ private fun SetupScreen(
             }
         }
 
-        Text(stringResource(R.string.choose_audio_processing), style = MaterialTheme.typography.titleMedium)
-        Box(Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = { captureModeMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(captureModeLabel(state.audioCaptureMode))
-            }
-            DropdownMenu(expanded = captureModeMenuOpen, onDismissRequest = { captureModeMenuOpen = false }) {
-                AudioCaptureMode.entries.forEach { mode ->
-                    DropdownMenuItem(
-                        text = { Text(captureModeLabel(mode)) },
-                        onClick = {
-                            onSelectAudioCaptureMode(mode)
-                            captureModeMenuOpen = false
-                        },
-                    )
+        if (selected?.kind != AudioInputKind.RTL_SDR) {
+            Text(stringResource(R.string.choose_audio_processing), style = MaterialTheme.typography.titleMedium)
+            Box(Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { captureModeMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(captureModeLabel(state.audioCaptureMode))
+                }
+                DropdownMenu(expanded = captureModeMenuOpen, onDismissRequest = { captureModeMenuOpen = false }) {
+                    AudioCaptureMode.entries.forEach { mode ->
+                        DropdownMenuItem(
+                            text = { Text(captureModeLabel(mode)) },
+                            onClick = {
+                                onSelectAudioCaptureMode(mode)
+                                captureModeMenuOpen = false
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -270,6 +281,7 @@ private fun ReceiverScreen(
     onStop: () -> Unit,
     onNewSession: () -> Unit,
     onUpdateCwSettings: (CwSettings) -> Unit,
+    onUpdateSdrSettings: (SdrSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -281,6 +293,7 @@ private fun ReceiverScreen(
                     onStop,
                     onNewSession,
                     onUpdateCwSettings,
+                    onUpdateSdrSettings,
                     Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()),
                 )
                 MessageList(state, Modifier.weight(1f).fillMaxHeight())
@@ -291,7 +304,16 @@ private fun ReceiverScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                item { ReceiverOverview(state, onStop, onNewSession, onUpdateCwSettings, Modifier.fillMaxWidth()) }
+                item {
+                    ReceiverOverview(
+                        state,
+                        onStop,
+                        onNewSession,
+                        onUpdateCwSettings,
+                        onUpdateSdrSettings,
+                        Modifier.fillMaxWidth(),
+                    )
+                }
                 item { MessageHeader(state.messages.size) }
                 if (state.messages.isEmpty()) item { Text(stringResource(R.string.no_messages)) }
                 items(state.messages, key = { it.id }) { MessageCard(it) }
@@ -306,6 +328,7 @@ private fun ReceiverOverview(
     onStop: () -> Unit,
     onNewSession: () -> Unit,
     onUpdateCwSettings: (CwSettings) -> Unit,
+    onUpdateSdrSettings: (SdrSettings) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -315,9 +338,15 @@ private fun ReceiverOverview(
                     Text(phaseText(state.phase), fontWeight = FontWeight.SemiBold)
                     if (state.phase == ReceiverPhase.STARTING) CircularProgressIndicator(Modifier.width(22.dp).height(22.dp))
                 }
-                Text(state.inputs.firstOrNull { it.id == state.selectedInputId }?.let(::inputLabel).orEmpty())
-                Text("${stringResource(R.string.signal_level)}: ${"%.1f".format(state.signal.rmsDb)} dBFS")
-                Text("${stringResource(R.string.audio_frequency)}: ${"%.1f".format(state.signal.peakFrequencyHz)} Hz")
+                Text(state.inputs.firstOrNull { it.id == state.selectedInputId }?.let { inputLabel(it) }.orEmpty())
+                val usingSdr = state.selectedAudioInput()?.kind == AudioInputKind.RTL_SDR
+                Text(
+                    "${stringResource(if (usingSdr) R.string.sdr_rf_level else R.string.signal_level)}: " +
+                        "${"%.1f".format(state.signal.rmsDb)} dBFS",
+                )
+                if (!usingSdr) {
+                    Text("${stringResource(R.string.audio_frequency)}: ${"%.1f".format(state.signal.peakFrequencyHz)} Hz")
+                }
                 Text(
                     "${stringResource(R.string.selected_decoder)}: " +
                         (state.selectedMode?.let { modeLabel(it) } ?: stringResource(R.string.decoder_not_selected)),
@@ -325,12 +354,20 @@ private fun ReceiverOverview(
                 )
                 state.captureInfo?.let { info ->
                     Text(
-                        stringResource(
-                            R.string.audio_capture_info,
-                            info.sampleRateHz,
-                            captureSourceLabel(info.source),
-                            info.routedDevice.ifBlank { stringResource(R.string.audio_device_unknown) },
-                        ),
+                        if (info.source == AudioCaptureSource.RTL_SDR) {
+                            stringResource(
+                                R.string.sdr_capture_info,
+                                info.sampleRateHz / 1_000_000.0,
+                                info.routedDevice.ifBlank { "RTL-SDR Blog V4" },
+                            )
+                        } else {
+                            stringResource(
+                                R.string.audio_capture_info,
+                                info.sampleRateHz,
+                                captureSourceLabel(info.source),
+                                info.routedDevice.ifBlank { stringResource(R.string.audio_device_unknown) },
+                            )
+                        },
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -344,7 +381,11 @@ private fun ReceiverOverview(
             }
         }
 
-        Waterfall(state.waterfall, Modifier.fillMaxWidth())
+        if (state.selectedAudioInput()?.kind == AudioInputKind.RTL_SDR) {
+            SdrPanel(state, onUpdateSdrSettings)
+        } else {
+            Waterfall(state.waterfall, Modifier.fillMaxWidth())
+        }
 
         if (state.selectedMode == DecodeMode.CW) {
             CwControls(state.cwSettings, onUpdateCwSettings)
@@ -369,6 +410,230 @@ private fun ReceiverOverview(
         } else {
             Button(onClick = onNewSession, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.new_session))
+            }
+        }
+    }
+}
+
+@Composable
+private fun SdrPanel(
+    state: ReceiverState,
+    onUpdate: (SdrSettings) -> Unit,
+) {
+    val settings = state.sdrSettings
+    var expanded by remember { mutableStateOf(true) }
+    var modulationMenuOpen by remember { mutableStateOf(false) }
+    var frequencyText by remember(settings.frequencyHz) { mutableStateOf(settings.frequencyHz.toString()) }
+    var bandwidthText by remember(settings.manualBandwidthHz) {
+        mutableStateOf(settings.manualBandwidthHz.toString())
+    }
+
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(stringResource(R.string.sdr_controls), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.sdr_frequency_mhz, settings.frequencyHz / 1_000_000.0),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        stringResource(if (expanded) R.string.sdr_collapse else R.string.sdr_expand),
+                    )
+                }
+            }
+
+            if (expanded) {
+                RfWaterfall(state.rfWaterfall, Modifier.fillMaxWidth())
+
+                Text(stringResource(R.string.sdr_frequency), style = MaterialTheme.typography.labelLarge)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = {
+                            onUpdate(
+                                settings.copy(
+                                    frequencyHz = (settings.frequencyHz - SdrSettings.TUNING_STEP_HZ)
+                                        .coerceAtLeast(SdrSettings.MIN_FREQUENCY_HZ),
+                                ),
+                            )
+                        },
+                    ) { Icon(Icons.Default.Remove, stringResource(R.string.sdr_frequency_down)) }
+                    OutlinedTextField(
+                        value = frequencyText,
+                        onValueChange = { value ->
+                            if (value.all(Char::isDigit) && value.length <= 10) {
+                                frequencyText = value
+                                value.toLongOrNull()
+                                    ?.takeIf { it in SdrSettings.MIN_FREQUENCY_HZ..SdrSettings.MAX_FREQUENCY_HZ }
+                                    ?.let { onUpdate(settings.copy(frequencyHz = it)) }
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        label = { Text(stringResource(R.string.sdr_frequency_hz)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                    IconButton(
+                        onClick = {
+                            onUpdate(
+                                settings.copy(
+                                    frequencyHz = (settings.frequencyHz + SdrSettings.TUNING_STEP_HZ)
+                                        .coerceAtMost(SdrSettings.MAX_FREQUENCY_HZ),
+                                ),
+                            )
+                        },
+                    ) { Icon(Icons.Default.Add, stringResource(R.string.sdr_frequency_up)) }
+                }
+                Text(stringResource(R.string.sdr_step_100_hz), style = MaterialTheme.typography.labelSmall)
+
+                Text(stringResource(R.string.sdr_modulation), style = MaterialTheme.typography.labelLarge)
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { modulationMenuOpen = true }, modifier = Modifier.fillMaxWidth()) {
+                        Text(settings.modulation.displayName)
+                    }
+                    DropdownMenu(
+                        expanded = modulationMenuOpen,
+                        onDismissRequest = { modulationMenuOpen = false },
+                    ) {
+                        SdrModulation.entries.forEach { modulation ->
+                            DropdownMenuItem(
+                                text = { Text(modulation.displayName) },
+                                onClick = {
+                                    onUpdate(settings.copy(modulation = modulation))
+                                    modulationMenuOpen = false
+                                },
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.sdr_bandwidth_automatic))
+                    Switch(
+                        checked = settings.automaticBandwidth,
+                        onCheckedChange = { onUpdate(settings.copy(automaticBandwidth = it)) },
+                    )
+                }
+                if (settings.automaticBandwidth) {
+                    Text(
+                        stringResource(R.string.sdr_bandwidth_value, settings.bandwidthHz),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = bandwidthText,
+                        onValueChange = { value ->
+                            if (value.all(Char::isDigit) && value.length <= 6) {
+                                bandwidthText = value
+                                value.toIntOrNull()?.takeIf { it in 500..200_000 }?.let {
+                                    onUpdate(settings.copy(manualBandwidthHz = it))
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.sdr_bandwidth_hz)) },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        singleLine = true,
+                    )
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.sdr_gain_automatic))
+                    Switch(
+                        checked = settings.automaticGain,
+                        onCheckedChange = { onUpdate(settings.copy(automaticGain = it)) },
+                    )
+                }
+                if (!settings.automaticGain) {
+                    Text(
+                        stringResource(R.string.sdr_gain_value, settings.manualGainPercent),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = settings.manualGainPercent.toFloat(),
+                        onValueChange = {
+                            onUpdate(settings.copy(manualGainPercent = it.roundToInt().coerceIn(0, 100)))
+                        },
+                        valueRange = 0f..100f,
+                        steps = 99,
+                    )
+                }
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.sdr_squelch))
+                    Switch(
+                        checked = settings.squelchEnabled,
+                        onCheckedChange = { onUpdate(settings.copy(squelchEnabled = it)) },
+                    )
+                }
+                if (settings.squelchEnabled) {
+                    Text(
+                        stringResource(R.string.sdr_squelch_value, settings.squelchThresholdDb),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Slider(
+                        value = settings.squelchThresholdDb.toFloat(),
+                        onValueChange = {
+                            onUpdate(settings.copy(squelchThresholdDb = it.roundToInt().coerceIn(-120, 0)))
+                        },
+                        valueRange = -120f..0f,
+                        steps = 119,
+                    )
+                }
+
+                Text(
+                    stringResource(R.string.sdr_ppm_value, settings.ppmCorrection),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                Slider(
+                    value = settings.ppmCorrection.toFloat(),
+                    onValueChange = {
+                        onUpdate(settings.copy(ppmCorrection = it.roundToInt().coerceIn(-100, 100)))
+                    },
+                    valueRange = -100f..100f,
+                    steps = 199,
+                )
+
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(stringResource(R.string.sdr_audio_monitor))
+                    Switch(
+                        checked = !settings.monitorMuted,
+                        onCheckedChange = { onUpdate(settings.copy(monitorMuted = !it)) },
+                    )
+                }
+                Text(
+                    stringResource(
+                        if (settings.monitorMuted) R.string.sdr_audio_muted else R.string.sdr_audio_enabled,
+                    ),
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
         }
     }
@@ -552,6 +817,7 @@ private fun captureSourceLabel(source: AudioCaptureSource): String = stringResou
         AudioCaptureSource.UNPROCESSED -> R.string.audio_source_unprocessed
         AudioCaptureSource.VOICE_RECOGNITION -> R.string.audio_source_voice_recognition
         AudioCaptureSource.MICROPHONE -> R.string.audio_source_microphone
+        AudioCaptureSource.RTL_SDR -> R.string.audio_source_rtl_sdr
         AudioCaptureSource.OTHER -> R.string.audio_source_other
     },
 )
@@ -599,7 +865,14 @@ private fun modeLabel(mode: DecodeMode): String = stringResource(
     },
 )
 
-private fun inputLabel(input: AudioInput): String = "${input.productName} · ${input.typeName}"
+@Composable
+private fun inputLabel(input: AudioInput): String = when {
+    input.kind == AudioInputKind.RTL_SDR -> stringResource(R.string.audio_source_rtl_sdr_v4)
+    input.isBuiltIn -> stringResource(R.string.audio_source_phone_microphone, input.productName)
+    else -> "${input.productName} · ${input.typeName}"
+}
+
+private fun ReceiverState.selectedAudioInput(): AudioInput? = inputs.firstOrNull { it.id == selectedInputId }
 
 private fun messageText(message: DecodedMessage): String = buildString {
     message.callsign?.let { append(it).append(": ") }

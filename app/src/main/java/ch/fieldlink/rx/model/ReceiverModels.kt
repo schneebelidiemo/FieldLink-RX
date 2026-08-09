@@ -57,7 +57,56 @@ data class AudioInput(
     val productName: String,
     val typeName: String,
     val isBuiltIn: Boolean,
+    val kind: AudioInputKind = AudioInputKind.MICROPHONE,
+    val usbDeviceId: Int? = null,
 )
+
+enum class AudioInputKind {
+    MICROPHONE,
+    RTL_SDR,
+}
+
+enum class SdrModulation(val displayName: String) {
+    USB("USB"),
+    LSB("LSB"),
+    CW("CW"),
+    AM("AM"),
+    NFM("NFM"),
+    WFM("WFM"),
+}
+
+data class SdrSettings(
+    val frequencyHz: Long = 14_074_000L,
+    val modulation: SdrModulation = SdrModulation.USB,
+    val automaticBandwidth: Boolean = true,
+    val manualBandwidthHz: Int = 3_000,
+    val automaticGain: Boolean = true,
+    val manualGainPercent: Int = 50,
+    val ppmCorrection: Int = 0,
+    val squelchEnabled: Boolean = false,
+    val squelchThresholdDb: Int = -80,
+    val monitorMuted: Boolean = true,
+) {
+    val bandwidthHz: Int
+        get() = if (automaticBandwidth) modulation.defaultBandwidthHz else manualBandwidthHz
+            .coerceIn(500, 200_000)
+
+    companion object {
+        const val MIN_FREQUENCY_HZ = 500_000L
+        const val MAX_FREQUENCY_HZ = 1_766_000_000L
+        const val TUNING_STEP_HZ = 100L
+    }
+}
+
+val SdrModulation.defaultBandwidthHz: Int
+    get() = when (this) {
+        SdrModulation.USB,
+        SdrModulation.LSB -> 3_000
+        SdrModulation.CW -> 1_000
+        SdrModulation.AM -> 10_000
+        SdrModulation.NFM -> 12_500
+        SdrModulation.WFM -> 180_000
+    }
 
 enum class ReceiverPhase {
     NEEDS_PASSWORD,
@@ -89,6 +138,7 @@ enum class AudioCaptureSource {
     UNPROCESSED,
     VOICE_RECOGNITION,
     MICROPHONE,
+    RTL_SDR,
     OTHER,
 }
 
@@ -121,8 +171,10 @@ data class ReceiverState(
     val selectedMode: DecodeMode? = null,
     val audioCaptureMode: AudioCaptureMode = AudioCaptureMode.MICROPHONE,
     val inputs: List<AudioInput> = emptyList(),
+    val sdrSettings: SdrSettings = SdrSettings(),
     val signal: SignalSnapshot = SignalSnapshot(),
     val waterfall: List<SpectrumFrame> = emptyList(),
+    val rfWaterfall: List<SpectrumFrame> = emptyList(),
     val messages: List<DecodedMessage> = emptyList(),
     val partialTexts: Map<DecodeMode, String> = emptyMap(),
     val cwSettings: CwSettings = CwSettings(),

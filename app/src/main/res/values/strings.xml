@@ -2,7 +2,7 @@
 <resources>
     <string name="app_name">FieldLink RX</string>
     <string name="session_title">Start receiver</string>
-    <string name="session_explanation">Choose one decoder and an audio input. A password is only used for encrypted FieldLink Medium or Wide messages and is never stored.</string>
+    <string name="session_explanation">Choose one decoder and an audio source. A password is only used for encrypted FieldLink Medium or Wide messages and is never stored.</string>
     <string name="password_label">FieldLink password (optional)</string>
     <string name="password_minimum">Leave empty for unencrypted FieldLink; otherwise enter at least 16 characters</string>
     <string name="start_reception">Start reception</string>
@@ -12,6 +12,8 @@
     <string name="reception_starting">Starting receiver…</string>
     <string name="reception_stopped">Reception stopped</string>
     <string name="microphone_permission">Microphone access is required to decode radio audio.</string>
+    <string name="usb_permission_denied">USB access to the RTL-SDR V4 was not granted.</string>
+    <string name="sdr_disconnected">The RTL-SDR V4 was disconnected. Reception has stopped.</string>
     <string name="notification_permission">Notifications are required for background reception.</string>
     <string name="notification_channel_receiver">Background reception</string>
     <string name="notification_channel_messages">Decoded messages</string>
@@ -23,8 +25,8 @@
     <string name="action_copy">Copy</string>
     <string name="action_share">Share</string>
     <string name="action_map">Google Maps</string>
-    <string name="audio_input">Audio input</string>
-    <string name="choose_audio_input">Select an audio input manually</string>
+    <string name="audio_input">Audio source</string>
+    <string name="choose_audio_input">Select an audio source</string>
     <string name="choose_audio_processing">Microphone processing</string>
     <string name="audio_capture_automatic">Automatic</string>
     <string name="audio_capture_unprocessed">Unprocessed (if supported)</string>
@@ -38,10 +40,14 @@
     <string name="audio_frequency">Audio frequency</string>
     <string name="decoder_status">Decoder status</string>
     <string name="audio_capture_info">Audio: %1$d Hz · %2$s · %3$s</string>
+    <string name="sdr_capture_info">SDR: %1$.1f MS/s I/Q · %2$s</string>
     <string name="audio_device_unknown">route not reported</string>
     <string name="audio_source_unprocessed">unprocessed</string>
     <string name="audio_source_voice_recognition">voice recognition</string>
     <string name="audio_source_microphone">microphone</string>
+    <string name="audio_source_rtl_sdr">RTL-SDR I/Q</string>
+    <string name="audio_source_rtl_sdr_v4">RTL-SDR – V4</string>
+    <string name="audio_source_phone_microphone">Phone microphone · %1$s</string>
     <string name="audio_source_other">other source</string>
     <string name="decoder_waiting_fieldlink">Waiting for the FieldLink preamble</string>
     <string name="decoder_preamble">Preamble: %1$d/%2$d · unique sync: %3$d/%4$d</string>
@@ -90,4 +96,26 @@
     <string name="share_message">Share decoded message</string>
     <string name="quality">Quality</string>
     <string name="coordinates">Coordinates</string>
+    <string name="sdr_controls">RTL-SDR V4</string>
+    <string name="sdr_rf_level">RF level</string>
+    <string name="sdr_frequency_mhz">Tuned: %1$.6f MHz</string>
+    <string name="sdr_frequency">Receive frequency</string>
+    <string name="sdr_frequency_hz">Frequency in Hz</string>
+    <string name="sdr_frequency_down">Tune down 100 Hz</string>
+    <string name="sdr_frequency_up">Tune up 100 Hz</string>
+    <string name="sdr_step_100_hz">Tuning step: 100 Hz · Range: 500 kHz to 1.766 GHz</string>
+    <string name="sdr_modulation">Modulation</string>
+    <string name="sdr_bandwidth_automatic">Automatic filter bandwidth</string>
+    <string name="sdr_bandwidth_value">Filter bandwidth: %1$d Hz</string>
+    <string name="sdr_bandwidth_hz">Manual filter bandwidth in Hz</string>
+    <string name="sdr_gain_automatic">Automatic gain</string>
+    <string name="sdr_gain_value">Manual gain: %1$d %%</string>
+    <string name="sdr_squelch">Squelch</string>
+    <string name="sdr_squelch_value">Squelch: %1$d dBFS</string>
+    <string name="sdr_ppm_value">Frequency correction: %1$d ppm</string>
+    <string name="sdr_audio_monitor">Play demodulated audio</string>
+    <string name="sdr_audio_muted">Audio monitoring is muted</string>
+    <string name="sdr_audio_enabled">Audio monitoring is enabled</string>
+    <string name="sdr_expand">Expand SDR controls</string>
+    <string name="sdr_collapse">Collapse SDR controls</string>
 </resources>

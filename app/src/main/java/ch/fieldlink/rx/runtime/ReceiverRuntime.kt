@@ -10,6 +10,7 @@ import ch.fieldlink.rx.model.DecoderDiagnostic
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
 import ch.fieldlink.rx.model.ReceiverState
+import ch.fieldlink.rx.model.SdrSettings
 import ch.fieldlink.rx.model.SignalSnapshot
 import ch.fieldlink.rx.model.SpectrumFrame
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +49,7 @@ object ReceiverRuntime {
                 audioCaptureMode = audioCaptureMode,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
+                rfWaterfall = emptyList(),
                 messages = emptyList(),
                 partialTexts = emptyMap(),
                 cwTracks = emptyList(),
@@ -81,6 +83,10 @@ object ReceiverRuntime {
         mutableState.update { it.copy(audioCaptureMode = mode) }
     }
 
+    fun updateSdrSettings(settings: SdrSettings) {
+        mutableState.update { it.copy(sdrSettings = settings) }
+    }
+
     fun updateCwSettings(settings: CwSettings) {
         mutableState.update { it.copy(cwSettings = settings) }
     }
@@ -108,6 +114,12 @@ object ReceiverRuntime {
         }
     }
 
+    fun rfSpectrum(frame: SpectrumFrame) {
+        mutableState.update { current ->
+            current.copy(rfWaterfall = (current.rfWaterfall + frame).takeLast(MAX_WATERFALL_ROWS))
+        }
+    }
+
     fun partial(mode: DecodeMode, text: String) {
         mutableState.update { current -> current.copy(partialTexts = current.partialTexts + (mode to text.takeLast(1_000))) }
     }
@@ -129,21 +141,23 @@ object ReceiverRuntime {
         mutableState.update { it.copy(phase = ReceiverPhase.ERROR, error = message) }
     }
 
-    fun stopped() {
+    fun stopped(errorMessage: String? = null) {
         synchronized(lock) {
             password?.fill('\u0000')
             password = null
         }
         mutableState.update {
             it.copy(
-                phase = ReceiverPhase.STOPPED,
+                phase = if (errorMessage == null) ReceiverPhase.STOPPED else ReceiverPhase.ERROR,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
+                rfWaterfall = emptyList(),
                 partialTexts = emptyMap(),
                 cwTracks = emptyList(),
                 messages = emptyList(),
                 captureInfo = null,
                 decoderDiagnostic = DecoderDiagnostic(),
+                error = errorMessage,
             )
         }
     }
@@ -159,6 +173,7 @@ object ReceiverRuntime {
                 selectedMode = null,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
+                rfWaterfall = emptyList(),
                 partialTexts = emptyMap(),
                 cwTracks = emptyList(),
                 messages = emptyList(),

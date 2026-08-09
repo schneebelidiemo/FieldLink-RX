@@ -77,3 +77,22 @@ target_include_directories(fieldlink_js8 PRIVATE ${JS8_PORT_DIR}/core/include)
 target_compile_features(fieldlink_js8 PRIVATE cxx_std_20)
 target_compile_options(fieldlink_js8 PRIVATE -O3 -Wall -Wextra)
 target_link_libraries(fieldlink_js8 PRIVATE js8core_rx fftw3f log m)
+
+# The Android RTL-SDR source is pinned as a Git submodule. Only libusb and
+# librtlsdr are compiled. The rtl_tcp server and its network code are excluded.
+set(RTL_ANDROID_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/rtl_tcp_andro/rtlsdr/src/main/cpp)
+if(NOT EXISTS ${RTL_ANDROID_DIR}/librtlsdr/src/librtlsdr.c)
+    message(FATAL_ERROR "RTL-SDR Android submodule is missing; checkout with submodules enabled")
+endif()
+
+add_subdirectory(${RTL_ANDROID_DIR}/librtlsdr ${CMAKE_CURRENT_BINARY_DIR}/rtl_sdr_android EXCLUDE_FROM_ALL)
+
+add_library(fieldlink_sdr SHARED native_sdr.cpp)
+target_include_directories(
+    fieldlink_sdr
+    PRIVATE
+    ${RTL_ANDROID_DIR}/librtlsdr/include
+)
+target_compile_features(fieldlink_sdr PRIVATE cxx_std_17)
+target_compile_options(fieldlink_sdr PRIVATE -O3 -Wall -Wextra)
+target_link_libraries(fieldlink_sdr PRIVATE librtlsdr log m)

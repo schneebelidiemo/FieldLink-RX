@@ -1,6 +1,13 @@
 package ch.fieldlink.rx
 
 import android.Manifest
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,17 +18,48 @@ import ch.fieldlink.rx.audio.AudioInputRepository
 import ch.fieldlink.rx.audio.ReceiverService
 import ch.fieldlink.rx.model.DecodeMode
 import ch.fieldlink.rx.model.AudioCaptureMode
+import ch.fieldlink.rx.model.AudioInputKind
 import ch.fieldlink.rx.model.CwSettings
 import ch.fieldlink.rx.runtime.ReceiverRuntime
 import ch.fieldlink.rx.ui.FieldLinkRxApp
 import ch.fieldlink.rx.ui.FieldLinkRxTheme
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        private const val ACTION_USB_PERMISSION = "ch.fieldlink.rx.USB_PERMISSION"
+    }
+
     private var pendingPassword: String? = null
     private var pendingInputId: Int? = null
     private var pendingMode: DecodeMode? = null
     private var pendingAudioCaptureMode: AudioCaptureMode? = null
     private val cwPreferences by lazy { getSharedPreferences("cw_settings", MODE_PRIVATE) }
+    private var usbReceiverRegistered = false
+
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val device = intent.usbDevice() ?: return
+            if (!AudioInputRepository.isSupportedRtlSdr(device)) return
+            when (intent.action) {
+                ACTION_USB_PERMISSION -> {
+                    val granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false) &&
+                        getSystemService(UsbManager::class.java).hasPermission(device)
+                    if (granted) requestNotificationPermission()
+                    else ReceiverRuntime.error(getString(R.string.usb_permission_denied))
+                }
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> refreshInputs(preferSdr = true)
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> {
+                    val detachedInputId = AudioInputRepository.inputIdFor(device)
+                    val wasSelected = detachedInputId != null &&
+                        ReceiverRuntime.state.value.selectedInputId == detachedInputId
+                    refreshInputs()
+                    if (wasSelected) {
+                        ReceiverService.stop(this@MainActivity, getString(R.string.sdr_disconnected))
+                    }
+                }
+            }
+        }
+    }
 
     private val microphonePermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -38,16 +76,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        registerUsbReceiver()
         ReceiverRuntime.updateCwSettings(loadCwSettings())
-        refreshInputs()
+        refreshInputs(preferSdr = true)
         setContent {
             FieldLinkRxTheme {
                 FieldLinkRxApp(
-                    onRefreshInputs = ::refreshInputs,
+                    onRefreshInputs = { refreshInputs() },
                     onSelectInput = ReceiverRuntime::selectInput,
                     onSelectMode = ReceiverRuntime::selectMode,
                     onSelectAudioCaptureMode = ReceiverRuntime::selectAudioCaptureMode,
                     onUpdateCwSettings = ::saveCwSettings,
+                    onUpdateSdrSettings = ReceiverRuntime::updateSdrSettings,
                     onStart = ::requestStart,
                     onStop = { ReceiverService.stop(this) },
                     onNewSession = ReceiverRuntime::requireNewPassword,
@@ -61,8 +101,26 @@ class MainActivity : ComponentActivity() {
         refreshInputs()
     }
 
-    private fun refreshInputs() {
-        ReceiverRuntime.setInputs(AudioInputRepository.list(this))
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.usbDevice()?.let { AudioInputRepository.isSupportedRtlSdr(it) } == true) {
+            refreshInputs(preferSdr = true)
+        }
+    }
+
+    override fun onDestroy() {
+        if (usbReceiverRegistered) unregisterReceiver(usbReceiver)
+        usbReceiverRegistered = false
+        super.onDestroy()
+    }
+
+    private fun refreshInputs(preferSdr: Boolean = false) {
+        val inputs = AudioInputRepository.list(this)
+        ReceiverRuntime.setInputs(inputs)
+        if (preferSdr) inputs.firstOrNull { it.kind == AudioInputKind.RTL_SDR }?.let {
+            ReceiverRuntime.selectInput(it.id)
+        }
     }
 
     private fun loadCwSettings(): CwSettings = CwSettings(
@@ -98,11 +156,44 @@ class MainActivity : ComponentActivity() {
         pendingInputId = inputId
         pendingMode = mode
         pendingAudioCaptureMode = audioCaptureMode
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+        val selectedInput = ReceiverRuntime.state.value.inputs.firstOrNull { it.id == inputId }
+        if (selectedInput?.kind == AudioInputKind.RTL_SDR) {
+            requestUsbPermission(inputId)
+        } else if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             microphonePermission.launch(Manifest.permission.RECORD_AUDIO)
         } else {
             requestNotificationPermission()
         }
+    }
+
+    private fun requestUsbPermission(inputId: Int?) {
+        val device = AudioInputRepository.resolveRtlSdr(this, inputId)
+        if (device == null) {
+            ReceiverRuntime.error(getString(R.string.sdr_disconnected))
+            return
+        }
+        val manager = getSystemService(UsbManager::class.java)
+        if (manager.hasPermission(device)) {
+            requestNotificationPermission()
+            return
+        }
+        val permissionIntent = PendingIntent.getBroadcast(
+            this,
+            0,
+            Intent(ACTION_USB_PERMISSION).setPackage(packageName),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+        )
+        manager.requestPermission(device, permissionIntent)
+    }
+
+    private fun registerUsbReceiver() {
+        val filter = IntentFilter().apply {
+            addAction(ACTION_USB_PERMISSION)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+        }
+        registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED)
+        usbReceiverRegistered = true
     }
 
     private fun requestNotificationPermission() {
@@ -125,4 +216,7 @@ class MainActivity : ComponentActivity() {
         ReceiverRuntime.configure(password, inputId, mode, audioCaptureMode)
         ReceiverService.start(this)
     }
+
+    private fun Intent.usbDevice(): UsbDevice? =
+        getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
 }

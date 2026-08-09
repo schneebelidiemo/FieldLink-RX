@@ -1,15 +1,16 @@
 # FieldLink RX
 
 FieldLink RX is an offline-only Android receiver for amateur-radio audio. It never transmits. The
-app records live audio from the phone microphone or a manually selected Android audio input,
-displays a 0–3 kHz waterfall and feeds the samples to independent decoder modules.
+app receives live audio from the phone microphone, an Android audio input, or a directly connected
+RTL-SDR Blog V4. It displays the appropriate waterfall and feeds 48 kHz mono samples to the selected
+decoder module.
 
 ## Target
 
 - Android 14 (API 34) or newer
 - 48 kHz, mono, 16-bit PCM input
 - German and English user interface
-- foreground microphone service for reception with the screen off
+- foreground microphone or connected-device service for reception with the screen off
 - no audio recordings, network transport, accounts or persistent message history
 - GPL-3.0-or-later
 
@@ -19,7 +20,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.4.1 |
+| Mode | Status in 0.5.0 |
 | --- | --- |
 | FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Adaptive 3-track decoder with dynamic noise floor, 3–60 WPM, tone/sensitivity controls and confidence |
@@ -52,6 +53,17 @@ recognized.
 Medium replaces the earlier experimental Fast profile. It uses 8-MFSK, 50 Hz tone spacing and
 20 ms symbols, giving about 400 Hz occupied width and 14.7 seconds per packet. The longer symbols
 are intended to survive an SSB radio chain while remaining substantially faster than Wide.
+
+## RTL-SDR V4
+
+Select `RTL-SDR – V4` under **Audio source**, grant Android USB access, and start reception. The SDR
+page provides a 2.4 MS/s RF waterfall, manual frequency entry with 100 Hz steps, USB/LSB/CW/AM/NFM/WFM
+demodulation, automatic or manual bandwidth and gain, PPM correction, squelch, and a muted-by-default
+audio monitor. The supported hardware tuning range is 500 kHz to 1.766 GHz.
+
+The implementation opens the Android USB file descriptor directly. It does not use rtl_tcp, does not
+request Internet access, and does not record I/Q or audio. SDR settings are intentionally reset when
+the app process starts. The V4-compatible Android driver is pinned as source and compiled by CMake.
 
 ## Build
 
