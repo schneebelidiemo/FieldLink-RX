@@ -8,7 +8,9 @@ import ch.fieldlink.rx.runtime.ReceiverRuntime
 
 class DecoderCoordinator(
     password: CharArray,
+    selectedMode: DecodeMode,
     private val onMessage: (DecodedMessage) -> Unit,
+    enableSpectrumAnalysis: Boolean = true,
 ) : AutoCloseable {
     private data class DecoderSlot(
         val name: String,
@@ -17,27 +19,42 @@ class DecoderCoordinator(
         var disabled: Boolean = false,
     )
 
-    private val spectrumAnalyzer = SpectrumAnalyzer()
+    private val spectrumAnalyzer = if (enableSpectrumAnalysis) SpectrumAnalyzer() else null
     private var latestSpectrum: SpectrumAnalysis? = null
     private val decoders = listOf(
-        DecoderSlot("FieldLink", FieldLinkStreamDecoder(password.copyOf(), onMessage)),
-        DecoderSlot(
-            "CW",
-            CwDecoder(onMessage) { text -> ReceiverRuntime.partial(DecodeMode.CW, text) },
-        ),
-        DecoderSlot(
-            "RTTY",
-            RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(DecodeMode.RTTY, text) },
-        ),
-        DecoderSlot(
-            "PSK",
-            PskDecoder(onMessage) { mode, text -> ReceiverRuntime.partial(mode, text) },
-        ),
-        DecoderSlot("FT8/FT4", FtxLiveDecoder(onMessage)),
+        DecoderSlot(selectedMode.displayName, decoderFor(selectedMode, password)),
     )
 
+    private fun decoderFor(mode: DecodeMode, password: CharArray): AudioDecoder = when (mode) {
+        DecodeMode.FIELDLINK_MEDIUM,
+        DecodeMode.FIELDLINK_WIDE -> FieldLinkStreamDecoder(
+            password = password.copyOf(),
+            selectedMode = mode,
+            emit = onMessage,
+            diagnostic = ReceiverRuntime::decoderDiagnostic,
+        )
+
+        DecodeMode.CW -> CwDecoder(
+            emit = onMessage,
+            settingsProvider = { ReceiverRuntime.state.value.cwSettings },
+            status = ReceiverRuntime::cwTracks,
+        )
+        DecodeMode.RTTY -> RttyDecoder(onMessage) { text -> ReceiverRuntime.partial(mode, text) }
+        DecodeMode.PSK31,
+        DecodeMode.PSK63 -> PskDecoder(mode, onMessage) { activeMode, text -> ReceiverRuntime.partial(activeMode, text) }
+
+        DecodeMode.FT8,
+        DecodeMode.FT4 -> FtxLiveDecoder(mode, onMessage)
+
+        DecodeMode.JS8 -> Js8LiveDecoder(onMessage)
+    }.also {
+        if (mode != DecodeMode.FIELDLINK_MEDIUM && mode != DecodeMode.FIELDLINK_WIDE) {
+            password.fill('\u0000')
+        }
+    }
+
     fun process(samples: FloatArray) {
-        val analysis = spectrumAnalyzer.add(samples)
+        val analysis = spectrumAnalyzer?.add(samples)
         if (analysis != null) {
             latestSpectrum = analysis
             ReceiverRuntime.signal(analysis.signal, analysis.frame)

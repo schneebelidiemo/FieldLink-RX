@@ -4,6 +4,8 @@ import ch.fieldlink.rx.audio.PcmRecorder
 import ch.fieldlink.rx.dsp.FloatRingBuffer
 import ch.fieldlink.rx.dsp.SpectrumAnalysis
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.DecoderDiagnostic
+import ch.fieldlink.rx.model.DecoderStage
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.protocol.FieldLinkDecodeResult
 import ch.fieldlink.rx.protocol.FieldLinkFec
@@ -12,19 +14,29 @@ import ch.fieldlink.rx.protocol.FieldLinkPacketAssembler
 import ch.fieldlink.rx.protocol.FieldLinkPacketCodec
 import java.util.ArrayDeque
 import kotlin.math.PI
-import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.cos
 
 class FieldLinkStreamDecoder(
     private val password: CharArray,
+    selectedMode: DecodeMode,
     private val emit: (DecodedMessage) -> Unit,
+    private val diagnostic: ((DecoderDiagnostic) -> Unit)? = null,
 ) : AudioDecoder {
     companion object {
         private const val CENTER_HZ = 1_500.0
         private const val PREAMBLE_SYMBOLS = 32
-        private const val MIN_PREAMBLE_MATCHES = 27
+        // The last eight tones are the unique sync word. Requiring six of them
+        // prevents the long alternating lead-in from locking two symbols early,
+        // while allowing an acoustic path to damage part of the lead-in.
+        private const val MIN_ALTERNATING_MATCHES = 12
+        private const val MIN_SYNC_MATCHES = 6
+        private const val DIAGNOSTIC_PREAMBLE_MATCHES = 12
+        private const val PHASE_COUNT = 8
         private const val BUFFER_SAMPLES = 2_200_000
+        private const val MAX_COARSE_TONE_SHIFT = 6
+        private const val MIN_COARSE_ALTERNATING_MATCHES = 10
+        private const val MIN_COARSE_SYNC_MATCHES = 3
     }
 
     private data class Profile(
@@ -49,57 +61,139 @@ class FieldLinkStreamDecoder(
         val tone: Int,
         val offsetHz: Int,
         val confidence: Float,
+        val samples: FloatArray = FloatArray(0),
+    )
+
+    private data class CoarseAlignment(
+        val toneShift: Int,
+        val offsetRemainderHz: Double,
+        val score: Double,
     )
 
     private data class Candidate(
         val start: Long,
         val offsetHz: Double,
         val preambleQuality: Float,
+        val score: Double,
     )
 
     private inner class ModeDetector(val profile: Profile) {
-        private val hop = profile.symbolSamples / 4
-        private val histories = Array(4) { ArrayDeque<ToneDetection>() }
-        private val nextStarts = LongArray(4) { phase -> (phase * hop).toLong() }
+        private val hop = profile.symbolSamples / PHASE_COUNT
+        private val histories = Array(PHASE_COUNT) { ArrayDeque<ToneDetection>() }
+        private val nextStarts = LongArray(PHASE_COUNT) { phase -> (phase * hop).toLong() }
+        private var bestReportedMatches = 0
         var pending: Candidate? = null
         var ignoreBefore: Long = 0
 
         fun scan() {
             if (pending != null) return
-            for (phase in 0 until 4) {
+            var bestCandidate: Candidate? = null
+            for (phase in 0 until PHASE_COUNT) {
                 var next = maxOf(nextStarts[phase], ring.startSample)
                 val phaseRemainder = ((next - phase * hop) % profile.symbolSamples + profile.symbolSamples) % profile.symbolSamples
                 if (phaseRemainder != 0L) next += profile.symbolSamples - phaseRemainder
                 while (next + profile.symbolSamples <= ring.endSample) {
                     nextStarts[phase] = next + profile.symbolSamples
                     if (next >= ignoreBefore) {
-                        val detection = detectTone(ring.copy(next, profile.symbolSamples), next, profile)
+                        val samples = ring.copy(next, profile.symbolSamples)
+                        val detection = detectTone(samples, next, profile).copy(samples = samples)
                         val history = histories[phase]
                         history.addLast(detection)
                         while (history.size > PREAMBLE_SYMBOLS) history.removeFirst()
                         if (history.size == PREAMBLE_SYMBOLS) {
-                            var matches = 0
-                            var weightedOffset = 0.0
-                            var confidence = 0.0
-                            history.forEachIndexed { index, value ->
-                                if (value.tone == profile.pattern[index]) matches += 1
-                                weightedOffset += value.offsetHz * value.confidence
-                                confidence += value.confidence
-                            }
-                            if (matches >= MIN_PREAMBLE_MATCHES) {
-                                pending = Candidate(
-                                    start = history.first.start,
-                                    offsetHz = if (confidence > 0.0) weightedOffset / confidence else 0.0,
-                                    preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
-                                )
-                                histories.forEach { it.clear() }
-                                return
+                            val candidate = evaluateHistory(history)
+                            if (candidate != null &&
+                                (bestCandidate == null || candidate.score > bestCandidate.score)
+                            ) {
+                                bestCandidate = candidate
                             }
                         }
                     }
                     next += profile.symbolSamples
                 }
             }
+            bestCandidate?.let { candidate ->
+                pending = candidate
+                histories.forEach { it.clear() }
+                bestReportedMatches = 0
+            }
+        }
+
+        private fun evaluateHistory(history: ArrayDeque<ToneDetection>): Candidate? {
+            var bestAlignment: CoarseAlignment? = null
+            for (toneShift in -MAX_COARSE_TONE_SHIFT..MAX_COARSE_TONE_SHIFT) {
+                var alternatingAvailable = 0
+                var alternatingMatches = 0
+                var syncAvailable = 0
+                var syncMatches = 0
+                var weightedRemainder = 0.0
+                var confidenceSum = 0.0
+                history.forEachIndexed { index, value ->
+                    val shiftedTone = profile.pattern[index] + toneShift
+                    if (shiftedTone !in 0 until profile.tones) return@forEachIndexed
+                    if (index < 24) alternatingAvailable += 1 else syncAvailable += 1
+                    if (value.tone == shiftedTone) {
+                        if (index < 24) alternatingMatches += 1 else syncMatches += 1
+                        weightedRemainder += value.offsetHz * value.confidence
+                        confidenceSum += value.confidence
+                    }
+                }
+                if (
+                    alternatingMatches < minOf(MIN_COARSE_ALTERNATING_MATCHES, alternatingAvailable) ||
+                    syncAvailable < MIN_COARSE_SYNC_MATCHES ||
+                    syncMatches < minOf(MIN_COARSE_SYNC_MATCHES, syncAvailable)
+                ) {
+                    continue
+                }
+                val remainder = if (confidenceSum > 0.0) weightedRemainder / confidenceSum else 0.0
+                val score = syncMatches * 20.0 + alternatingMatches + confidenceSum
+                if (bestAlignment == null || score > bestAlignment.score) {
+                    bestAlignment = CoarseAlignment(toneShift, remainder, score)
+                }
+            }
+
+            val alignment = bestAlignment ?: return null
+            val fixedOffsetHz = alignment.toneShift * profile.spacingHz + alignment.offsetRemainderHz
+            var alternatingMatches = 0
+            var syncMatches = 0
+            var confidence = 0.0
+            history.forEachIndexed { index, value ->
+                if (value.samples.isEmpty()) return null
+                val corrected = detectTone(
+                    samples = value.samples,
+                    absoluteStart = value.start,
+                    profile = profile,
+                    fixedOffsetHz = fixedOffsetHz,
+                )
+                if (corrected.tone == profile.pattern[index]) {
+                    if (index < 24) alternatingMatches += 1 else syncMatches += 1
+                    confidence += corrected.confidence
+                }
+            }
+            val matches = alternatingMatches + syncMatches
+            if (matches >= DIAGNOSTIC_PREAMBLE_MATCHES && matches > bestReportedMatches) {
+                bestReportedMatches = matches
+                diagnostic?.invoke(
+                    DecoderDiagnostic(
+                        stage = DecoderStage.PREAMBLE,
+                        preambleMatches = matches,
+                        syncMatches = syncMatches,
+                    ),
+                )
+            }
+            if (
+                alternatingMatches < MIN_ALTERNATING_MATCHES ||
+                syncMatches < MIN_SYNC_MATCHES
+            ) {
+                return null
+            }
+            val averageConfidence = if (matches > 0) confidence / matches else 0.0
+            return Candidate(
+                start = history.first.start,
+                offsetHz = fixedOffsetHz,
+                preambleQuality = matches.toFloat() / PREAMBLE_SYMBOLS,
+                score = syncMatches * 10.0 + alternatingMatches + averageConfidence,
+            )
         }
 
         fun decodeReady(): DecodedFrame? {
@@ -134,7 +228,9 @@ class FieldLinkStreamDecoder(
             }
             pending = null
             ignoreBefore = candidate.start + profile.frameSamples
-            for (phase in 0 until 4) nextStarts[phase] = maxOf(nextStarts[phase], ignoreBefore + phase * hop)
+            for (phase in 0 until PHASE_COUNT) {
+                nextStarts[phase] = maxOf(nextStarts[phase], ignoreBefore + phase * hop)
+            }
 
             return DecodedFrame(
                 mode = profile.mode,
@@ -157,12 +253,12 @@ class FieldLinkStreamDecoder(
     private val detectors = listOf(
         ModeDetector(
             Profile(
-                mode = DecodeMode.FIELDLINK_FAST,
-                tones = 16,
-                bitsPerSymbol = 4,
-                spacingHz = 100.0,
-                symbolSamples = 480,
-                offsets = intArrayOf(-40, -20, 0, 20, 40),
+                mode = DecodeMode.FIELDLINK_MEDIUM,
+                tones = 8,
+                bitsPerSymbol = 3,
+                spacingHz = 50.0,
+                symbolSamples = 960,
+                offsets = intArrayOf(-20, -10, 0, 10, 20),
             ),
         ),
         ModeDetector(
@@ -172,10 +268,12 @@ class FieldLinkStreamDecoder(
                 bitsPerSymbol = 3,
                 spacingHz = 20.0,
                 symbolSamples = 2_400,
-                offsets = intArrayOf(-12, -8, -4, 0, 4, 8, 12),
+                offsets = intArrayOf(-18, -12, -6, 0, 6, 12, 18),
             ),
         ),
-    )
+    ).filter { it.profile.mode == selectedMode }.also {
+        require(it.size == 1) { "A FieldLink Medium or Wide decoder must be selected." }
+    }
 
     override fun process(samples: FloatArray, spectrum: SpectrumAnalysis?) {
         ring.append(samples)
@@ -187,34 +285,41 @@ class FieldLinkStreamDecoder(
     }
 
     private fun decodeFrame(frame: DecodedFrame) {
+        diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.FRAME))
         try {
             val block = FieldLinkFec.decode(frame.bits)
             val packet = FieldLinkPacketCodec.fixedBlockToPacket(block)
             val envelope = assembler.add(packet) ?: return
             when (val result = FieldLinkMessageCodec.decode(envelope, packet.messageId, password)) {
-                is FieldLinkDecodeResult.Success -> emit(
-                    DecodedMessage(
-                        id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
-                        mode = frame.mode,
-                        text = result.body.text.orEmpty().ifBlank { result.body.kind },
-                        callsign = result.body.callsign,
-                        coordinates = result.body.coordinates,
-                        audioFrequencyHz = frame.centerFrequencyHz,
-                        quality = frame.quality,
-                        uncertain = frame.quality < 0.72f,
-                    ),
-                )
-                is FieldLinkDecodeResult.EncryptedWithoutKey -> emit(
-                    DecodedMessage(
-                        id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
-                        mode = frame.mode,
-                        text = "Encrypted message received",
-                        audioFrequencyHz = frame.centerFrequencyHz,
-                        quality = frame.quality,
-                        uncertain = false,
-                        encryptedWithoutKey = true,
-                    ),
-                )
+                is FieldLinkDecodeResult.Success -> {
+                    diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.SUCCESS))
+                    emit(
+                        DecodedMessage(
+                            id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                            mode = frame.mode,
+                            text = result.body.text.orEmpty().ifBlank { result.body.kind },
+                            callsign = result.body.callsign,
+                            coordinates = result.body.coordinates,
+                            audioFrequencyHz = frame.centerFrequencyHz,
+                            quality = frame.quality,
+                            uncertain = frame.quality < 0.72f,
+                        ),
+                    )
+                }
+                is FieldLinkDecodeResult.EncryptedWithoutKey -> {
+                    diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.ENCRYPTED))
+                    emit(
+                        DecodedMessage(
+                            id = packet.messageId.joinToString("") { "%02x".format(it.toInt() and 0xff) },
+                            mode = frame.mode,
+                            text = "Encrypted message received",
+                            audioFrequencyHz = frame.centerFrequencyHz,
+                            quality = frame.quality,
+                            uncertain = false,
+                            encryptedWithoutKey = true,
+                        ),
+                    )
+                }
                 is FieldLinkDecodeResult.Damaged -> emitDamaged(frame, result.reason)
             }
         } catch (error: Throwable) {
@@ -223,6 +328,7 @@ class FieldLinkStreamDecoder(
     }
 
     private fun emitDamaged(frame: DecodedFrame, reason: String) {
+        diagnostic?.invoke(DecoderDiagnostic(stage = DecoderStage.DAMAGED, detail = reason))
         emit(
             DecodedMessage(
                 mode = frame.mode,
@@ -279,9 +385,11 @@ class FieldLinkStreamDecoder(
         val coefficient = 2.0 * cos(omega)
         var previous = 0.0
         var previousPrevious = 0.0
-        for (index in samples.indices) {
-            val hann = 0.5 - 0.5 * cos(2.0 * PI * index / (samples.size - 1).coerceAtLeast(1))
-            val current = samples[index] * hann + coefficient * previous - previousPrevious
+        // A rectangular symbol window is deliberate: FieldLink tone spacing is
+        // exactly one Fourier bin (50 Hz/20 ms or 20 Hz/50 ms). A Hann window
+        // broadens the main lobe across adjacent MFSK tones.
+        for (sample in samples) {
+            val current = sample + coefficient * previous - previousPrevious
             previousPrevious = previous
             previous = current
         }

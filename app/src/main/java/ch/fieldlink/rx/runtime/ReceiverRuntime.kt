@@ -1,10 +1,16 @@
 package ch.fieldlink.rx.runtime
 
 import ch.fieldlink.rx.model.AudioInput
+import ch.fieldlink.rx.model.AudioCaptureInfo
+import ch.fieldlink.rx.model.AudioCaptureMode
 import ch.fieldlink.rx.model.DecodeMode
+import ch.fieldlink.rx.model.CwSettings
+import ch.fieldlink.rx.model.CwTrackSnapshot
+import ch.fieldlink.rx.model.DecoderDiagnostic
 import ch.fieldlink.rx.model.DecodedMessage
 import ch.fieldlink.rx.model.ReceiverPhase
 import ch.fieldlink.rx.model.ReceiverState
+import ch.fieldlink.rx.model.SdrSettings
 import ch.fieldlink.rx.model.SignalSnapshot
 import ch.fieldlink.rx.model.SpectrumFrame
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +28,15 @@ object ReceiverRuntime {
     private val mutableState = MutableStateFlow(ReceiverState())
     val state: StateFlow<ReceiverState> = mutableState.asStateFlow()
 
-    fun configure(passwordText: String, selectedInputId: Int?) {
-        require(passwordText.length >= 16) { "The group password must contain at least 16 characters." }
+    fun configure(
+        passwordText: String,
+        selectedInputId: Int?,
+        selectedMode: DecodeMode,
+        audioCaptureMode: AudioCaptureMode,
+    ) {
+        require(passwordText.isEmpty() || passwordText.length >= 16) {
+            "Leave the password empty or enter at least 16 characters."
+        }
         synchronized(lock) {
             password?.fill('\u0000')
             password = passwordText.toCharArray()
@@ -32,6 +45,16 @@ object ReceiverRuntime {
             it.copy(
                 phase = ReceiverPhase.STARTING,
                 selectedInputId = selectedInputId,
+                selectedMode = selectedMode,
+                audioCaptureMode = audioCaptureMode,
+                signal = SignalSnapshot(),
+                waterfall = emptyList(),
+                rfWaterfall = emptyList(),
+                messages = emptyList(),
+                partialTexts = emptyMap(),
+                cwTracks = emptyList(),
+                captureInfo = null,
+                decoderDiagnostic = DecoderDiagnostic(),
                 error = null,
             )
         }
@@ -52,14 +75,48 @@ object ReceiverRuntime {
         mutableState.update { it.copy(selectedInputId = id) }
     }
 
+    fun selectMode(mode: DecodeMode) {
+        mutableState.update { it.copy(selectedMode = mode, decoderDiagnostic = DecoderDiagnostic()) }
+    }
+
+    fun selectAudioCaptureMode(mode: AudioCaptureMode) {
+        mutableState.update { it.copy(audioCaptureMode = mode) }
+    }
+
+    fun updateSdrSettings(settings: SdrSettings) {
+        mutableState.update { it.copy(sdrSettings = settings) }
+    }
+
+    fun updateCwSettings(settings: CwSettings) {
+        mutableState.update { it.copy(cwSettings = settings) }
+    }
+
+    fun cwTracks(tracks: List<CwTrackSnapshot>) {
+        mutableState.update { it.copy(cwTracks = tracks.take(3)) }
+    }
+
     fun listening() {
         mutableState.update { it.copy(phase = ReceiverPhase.LISTENING, error = null) }
+    }
+
+    fun captureInfo(info: AudioCaptureInfo) {
+        mutableState.update { it.copy(captureInfo = info) }
+    }
+
+    fun decoderDiagnostic(diagnostic: DecoderDiagnostic) {
+        mutableState.update { it.copy(decoderDiagnostic = diagnostic) }
     }
 
     fun signal(snapshot: SignalSnapshot, frame: SpectrumFrame?) {
         mutableState.update { current ->
             val rows = if (frame == null) current.waterfall else (current.waterfall + frame).takeLast(MAX_WATERFALL_ROWS)
             current.copy(signal = snapshot, waterfall = rows)
+        }
+    }
+
+    fun rfSpectrum(frame: SpectrumFrame) {
+        mutableState.update { current ->
+            current.copy(rfWaterfall = (current.rfWaterfall + frame).takeLast(MAX_WATERFALL_ROWS))
         }
     }
 
@@ -84,17 +141,23 @@ object ReceiverRuntime {
         mutableState.update { it.copy(phase = ReceiverPhase.ERROR, error = message) }
     }
 
-    fun stopped() {
+    fun stopped(errorMessage: String? = null) {
         synchronized(lock) {
             password?.fill('\u0000')
             password = null
         }
         mutableState.update {
             it.copy(
-                phase = ReceiverPhase.STOPPED,
+                phase = if (errorMessage == null) ReceiverPhase.STOPPED else ReceiverPhase.ERROR,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
+                rfWaterfall = emptyList(),
                 partialTexts = emptyMap(),
+                cwTracks = emptyList(),
+                messages = emptyList(),
+                captureInfo = null,
+                decoderDiagnostic = DecoderDiagnostic(),
+                error = errorMessage,
             )
         }
     }
@@ -107,9 +170,15 @@ object ReceiverRuntime {
         mutableState.update {
             it.copy(
                 phase = ReceiverPhase.NEEDS_PASSWORD,
+                selectedMode = null,
                 signal = SignalSnapshot(),
                 waterfall = emptyList(),
+                rfWaterfall = emptyList(),
                 partialTexts = emptyMap(),
+                cwTracks = emptyList(),
+                messages = emptyList(),
+                captureInfo = null,
+                decoderDiagnostic = DecoderDiagnostic(),
                 error = null,
             )
         }
