@@ -12,6 +12,8 @@ RTLSDR_API int rtlsdr_open2(rtlsdr_dev_t** out_dev, int fd, const char* device_p
 
 namespace {
 
+thread_local int lastOpenError = 0;
+
 struct SdrHandle {
     rtlsdr_dev_t* device = nullptr;
 };
@@ -72,16 +74,27 @@ Java_ch_fieldlink_rx_sdr_NativeRtlSdrBridge_open(
     jint fileDescriptor,
     jstring devicePath
 ) {
+    lastOpenError = 0;
     const char* path = env->GetStringUTFChars(devicePath, nullptr);
-    if (path == nullptr) return 0;
+    if (path == nullptr) {
+        lastOpenError = -1;
+        return 0;
+    }
     auto* handle = new SdrHandle();
     const int result = rtlsdr_open2(&handle->device, fileDescriptor, path);
     env->ReleaseStringUTFChars(devicePath, path);
     if (result < 0 || handle->device == nullptr) {
+        lastOpenError = result == 0 ? -1 : result;
+        if (handle->device != nullptr) rtlsdr_close(handle->device);
         delete handle;
-        return static_cast<jlong>(result == 0 ? -1 : result);
+        return 0;
     }
     return static_cast<jlong>(reinterpret_cast<intptr_t>(handle));
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_ch_fieldlink_rx_sdr_NativeRtlSdrBridge_lastOpenError(JNIEnv*, jobject) {
+    return lastOpenError;
 }
 
 extern "C" JNIEXPORT jint JNICALL

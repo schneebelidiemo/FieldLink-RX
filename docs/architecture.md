@@ -33,6 +33,6 @@ management. RF and audio spectrum rendering are throttled independently from dec
 - No release APK may contain a radio transmission path. RTL-SDR audio monitoring is receive-only,
   muted by default and never routed back to a transmitter.
 - RTL-SDR USB, tuning, all six modulation modes and detach handling require a real Pixel 8a/V4 test
-  before 0.5.0 can be promoted from a test build.
+  before the SDR integration can be promoted from a test build.
 - The JS8Call gate additionally requires reference captures for all five submodes and real-device
   CPU/memory measurements before its status can be promoted from experimental.

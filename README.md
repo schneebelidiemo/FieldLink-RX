@@ -20,7 +20,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.5.0 |
+| Mode | Status in 0.5.1 |
 | --- | --- |
 | FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Adaptive 3-track decoder with dynamic noise floor, 3–60 WPM, tone/sensitivity controls and confidence |

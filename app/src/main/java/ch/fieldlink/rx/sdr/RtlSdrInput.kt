@@ -18,6 +18,8 @@ class RtlSdrInput(
     companion object {
         const val SAMPLE_RATE = SdrDemodulator.INPUT_SAMPLE_RATE
         private const val DC_AVOIDANCE_OFFSET_HZ = 12_000
+
+        internal fun isValidNativeHandle(handle: Long): Boolean = handle != 0L
     }
 
     private val stopping = AtomicBoolean(false)
@@ -53,7 +55,12 @@ class RtlSdrInput(
         }
         connection = openedConnection
         val openedHandle = NativeRtlSdrBridge.open(openedConnection.fileDescriptor, device.deviceName)
-        check(openedHandle > 0L) { "The RTL-SDR V4 driver could not open the device (code $openedHandle)." }
+        if (!isValidNativeHandle(openedHandle)) {
+            val error = NativeRtlSdrBridge.lastOpenError()
+            openedConnection.close()
+            connection = null
+            error("The RTL-SDR V4 driver could not open the device (code $error).")
+        }
         nativeHandle = openedHandle
 
         try {
@@ -140,14 +147,14 @@ class RtlSdrInput(
     override fun close() {
         stopping.set(true)
         val handle = nativeHandle
-        if (handle > 0L) NativeRtlSdrBridge.cancel(handle)
+        if (isValidNativeHandle(handle)) NativeRtlSdrBridge.cancel(handle)
         monitor.close()
     }
 
     private fun finishNative() {
         val handle = nativeHandle
         nativeHandle = 0L
-        if (handle > 0L) NativeRtlSdrBridge.close(handle)
+        if (isValidNativeHandle(handle)) NativeRtlSdrBridge.close(handle)
         connection?.close()
         connection = null
         monitor.close()

@@ -6,6 +6,7 @@ internal object NativeRtlSdrBridge {
     }
 
     external fun open(fileDescriptor: Int, devicePath: String): Long
+    external fun lastOpenError(): Int
     external fun configure(
         handle: Long,
         frequencyHz: Long,
