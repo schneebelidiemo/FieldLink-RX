@@ -427,6 +427,12 @@ private fun SdrPanel(
     var bandwidthText by remember(settings.manualBandwidthHz) {
         mutableStateOf(settings.manualBandwidthHz.toString())
     }
+    var manualGain by remember(settings.manualGainPercent) {
+        mutableStateOf(settings.manualGainPercent.toFloat())
+    }
+    var ppmCorrection by remember(settings.ppmCorrection) {
+        mutableStateOf(settings.ppmCorrection.toFloat())
+    }
 
     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -569,9 +575,12 @@ private fun SdrPanel(
                         style = MaterialTheme.typography.bodySmall,
                     )
                     Slider(
-                        value = settings.manualGainPercent.toFloat(),
-                        onValueChange = {
-                            onUpdate(settings.copy(manualGainPercent = it.roundToInt().coerceIn(0, 100)))
+                        value = manualGain,
+                        onValueChange = { manualGain = it },
+                        onValueChangeFinished = {
+                            onUpdate(
+                                settings.copy(manualGainPercent = manualGain.roundToInt().coerceIn(0, 100)),
+                            )
                         },
                         valueRange = 0f..100f,
                         steps = 99,
@@ -609,9 +618,12 @@ private fun SdrPanel(
                     style = MaterialTheme.typography.bodySmall,
                 )
                 Slider(
-                    value = settings.ppmCorrection.toFloat(),
-                    onValueChange = {
-                        onUpdate(settings.copy(ppmCorrection = it.roundToInt().coerceIn(-100, 100)))
+                    value = ppmCorrection,
+                    onValueChange = { ppmCorrection = it },
+                    onValueChangeFinished = {
+                        onUpdate(
+                            settings.copy(ppmCorrection = ppmCorrection.roundToInt().coerceIn(-100, 100)),
+                        )
                     },
                     valueRange = -100f..100f,
                     steps = 199,

@@ -19,7 +19,9 @@
 8. `RtlSdrInput` receives unsigned 8-bit I/Q at 2.4 MS/s from a directly opened Android USB file
    descriptor. It avoids the tuner DC center, creates a 256-bin RF waterfall, demodulates the
    manually selected USB/LSB/CW/AM/NFM/WFM mode and converts it to the same 48 kHz mono stream used
-   by the microphone path. No TCP server, socket, recording or Internet permission is present.
+   by the microphone path. Frequency, tuner gain and PPM changes briefly stop the asynchronous USB
+   stream, apply the synchronous hardware control outside libusb's transfer callback, then restart
+   reception. No TCP server, socket, recording or Internet permission is present.
 
 The receiver thread never performs UI work. Decoder errors are isolated from Android lifecycle
 management. RF and audio spectrum rendering are throttled independently from decoding.

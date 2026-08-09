@@ -20,6 +20,12 @@ class RtlSdrInput(
         private const val DC_AVOIDANCE_OFFSET_HZ = 12_000
 
         internal fun isValidNativeHandle(handle: Long): Boolean = handle != 0L
+
+        internal fun requiresHardwareRestart(previous: SdrSettings, current: SdrSettings): Boolean =
+            previous.frequencyHz != current.frequencyHz ||
+                previous.automaticGain != current.automaticGain ||
+                (!current.automaticGain && previous.manualGainPercent != current.manualGainPercent) ||
+                previous.ppmCorrection != current.ppmCorrection
     }
 
     private val stopping = AtomicBoolean(false)
@@ -77,23 +83,42 @@ class RtlSdrInput(
             check(result >= 0) { "The RTL-SDR V4 configuration failed (code $result)." }
             configuredSettings = initial
 
-            val readResult = NativeRtlSdrBridge.run(
-                openedHandle,
-                NativeRtlSdrBridge.IqListener { iq ->
-                    if (stopping.get()) return@IqListener
-                    val settings = settingsProvider().validated()
-                    applyChangedHardwareSettings(openedHandle, settings)
-                    spectrumAnalyzer.add(iq, settings.frequencyHz)?.let(onSpectrum)
-                    val audio = demodulator.process(iq, settings, tuningFor(settings.frequencyHz).offsetHz)
-                    if (audio.samples.isNotEmpty()) {
-                        onAudio(audio.samples)
-                        monitor.write(audio.samples, settings.monitorMuted)
-                    }
-                    onSignal(SignalSnapshot(rmsDb = audio.rfLevelDb, peakDb = audio.rfLevelDb))
-                    configuredSettings = settings
-                },
-            )
-            if (!stopping.get()) check(readResult >= 0) { "RTL-SDR USB reception failed (code $readResult)." }
+            while (!stopping.get()) {
+                val activeSettings = settingsProvider().validated()
+                applyChangedHardwareSettings(openedHandle, activeSettings)
+                applyChangedDspSettings(activeSettings)
+                configuredSettings = activeSettings
+                var restartRequested = false
+
+                val readResult = NativeRtlSdrBridge.run(
+                    openedHandle,
+                    NativeRtlSdrBridge.IqListener { iq ->
+                        if (stopping.get()) return@IqListener
+                        val settings = settingsProvider().validated()
+                        val appliedSettings = configuredSettings
+                        if (
+                            appliedSettings != null &&
+                            requiresHardwareRestart(appliedSettings, settings)
+                        ) {
+                            restartRequested = true
+                            NativeRtlSdrBridge.cancel(openedHandle)
+                            return@IqListener
+                        }
+                        applyChangedDspSettings(settings)
+                        spectrumAnalyzer.add(iq, settings.frequencyHz)?.let(onSpectrum)
+                        val audio = demodulator.process(iq, settings, tuningFor(settings.frequencyHz).offsetHz)
+                        if (audio.samples.isNotEmpty()) {
+                            onAudio(audio.samples)
+                            monitor.write(audio.samples, settings.monitorMuted)
+                        }
+                        onSignal(SignalSnapshot(rmsDb = audio.rfLevelDb, peakDb = audio.rfLevelDb))
+                        configuredSettings = settings
+                    },
+                )
+                if (stopping.get()) break
+                if (restartRequested) continue
+                check(readResult >= 0) { "RTL-SDR USB reception failed (code $readResult)." }
+            }
         } finally {
             finishNative()
         }
@@ -107,9 +132,8 @@ class RtlSdrInput(
             demodulator.reset()
             spectrumAnalyzer.reset()
         }
-        if (
-            settings.automaticGain != previous.automaticGain ||
-            settings.manualGainPercent != previous.manualGainPercent
+        if (settings.automaticGain != previous.automaticGain ||
+            (!settings.automaticGain && settings.manualGainPercent != previous.manualGainPercent)
         ) {
             val result = NativeRtlSdrBridge.setGain(
                 handle,
@@ -122,6 +146,10 @@ class RtlSdrInput(
             val result = NativeRtlSdrBridge.setPpm(handle, settings.ppmCorrection)
             check(result >= 0) { "RTL-SDR PPM correction failed (code $result)." }
         }
+    }
+
+    private fun applyChangedDspSettings(settings: SdrSettings) {
+        val previous = configuredSettings ?: return
         if (settings.modulation != previous.modulation || settings.bandwidthHz != previous.bandwidthHz) {
             demodulator.reset()
         }
