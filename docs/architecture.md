@@ -25,6 +25,9 @@
 9. FieldLink preamble acquisition first estimates a common integer tone displacement and residual
    frequency error, then verifies all 32 preamble symbols with one fixed correction. Medium accepts
    roughly ±300 Hz so normal SDR/radio oscillator and dial errors do not destroy the unique sync.
+10. Direct SDR FieldLink reception bypasses the hidden audio-spectrum FFT. The native reader uses
+    32 × 256 KiB asynchronous buffers, leaving about 1.7 seconds of I/Q scheduling reserve while
+    retaining the requested 2.4 MHz RF waterfall span.
 
 The receiver thread never performs UI work. Decoder errors are isolated from Android lifecycle
 management. RF and audio spectrum rendering are throttled independently from decoding.

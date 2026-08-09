@@ -36,14 +36,17 @@ class SpectrumAnalyzer(
     }
     private var writeIndex = 0
     private var sampleCount = 0L
+    private var samplesSinceAnalysis = 0
 
     fun add(samples: FloatArray): SpectrumAnalysis? {
         for (sample in samples) {
             ring[writeIndex] = sample
             writeIndex = (writeIndex + 1) and (FFT_SIZE - 1)
             sampleCount += 1
+            samplesSinceAnalysis += 1
         }
-        if (sampleCount < FFT_SIZE) return null
+        if (sampleCount < FFT_SIZE || samplesSinceAnalysis < sampleRate / 10) return null
+        samplesSinceAnalysis = 0
         return analyze()
     }
 
@@ -108,4 +111,3 @@ class SpectrumAnalyzer(
         return selected
     }
 }
-

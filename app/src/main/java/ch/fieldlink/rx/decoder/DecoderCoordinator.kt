@@ -10,6 +10,7 @@ class DecoderCoordinator(
     password: CharArray,
     selectedMode: DecodeMode,
     private val onMessage: (DecodedMessage) -> Unit,
+    enableSpectrumAnalysis: Boolean = true,
 ) : AutoCloseable {
     private data class DecoderSlot(
         val name: String,
@@ -18,7 +19,7 @@ class DecoderCoordinator(
         var disabled: Boolean = false,
     )
 
-    private val spectrumAnalyzer = SpectrumAnalyzer()
+    private val spectrumAnalyzer = if (enableSpectrumAnalysis) SpectrumAnalyzer() else null
     private var latestSpectrum: SpectrumAnalysis? = null
     private val decoders = listOf(
         DecoderSlot(selectedMode.displayName, decoderFor(selectedMode, password)),
@@ -53,7 +54,7 @@ class DecoderCoordinator(
     }
 
     fun process(samples: FloatArray) {
-        val analysis = spectrumAnalyzer.add(samples)
+        val analysis = spectrumAnalyzer?.add(samples)
         if (analysis != null) {
             latestSpectrum = analysis
             ReceiverRuntime.signal(analysis.signal, analysis.frame)

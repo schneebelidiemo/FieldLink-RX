@@ -103,6 +103,7 @@ class ReceiverService : Service() {
                     password = password,
                     selectedMode = selectedMode,
                     onMessage = ::onDecodedMessage,
+                    enableSpectrumAnalysis = !usingSdr || selectedMode.needsSpectrumAnalysis(),
                 )
                 coordinator = decoder
                 if (usingSdr) {
@@ -133,6 +134,14 @@ class ReceiverService : Service() {
                 stopSelf()
             }
         }
+    }
+
+    private fun DecodeMode.needsSpectrumAnalysis(): Boolean = when (this) {
+        DecodeMode.CW,
+        DecodeMode.RTTY,
+        DecodeMode.PSK31,
+        DecodeMode.PSK63 -> true
+        else -> false
     }
 
     private fun audioLoop(audioRecord: AudioRecord, pcmRecorder: PcmRecorder, decoder: DecoderCoordinator) {

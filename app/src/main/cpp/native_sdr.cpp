@@ -13,6 +13,8 @@ RTLSDR_API int rtlsdr_open2(rtlsdr_dev_t** out_dev, int fd, const char* device_p
 namespace {
 
 thread_local int lastOpenError = 0;
+constexpr uint32_t ASYNC_BUFFER_COUNT = 32;
+constexpr uint32_t ASYNC_BUFFER_LENGTH = 262'144;
 
 struct SdrHandle {
     rtlsdr_dev_t* device = nullptr;
@@ -145,7 +147,13 @@ Java_ch_fieldlink_rx_sdr_NativeRtlSdrBridge_run(
     env->DeleteLocalRef(listenerClass);
     if (callback == nullptr) return -1;
     CallbackContext context{env, listener, callback, handle->device, false};
-    const int result = rtlsdr_read_async(handle->device, iqCallback, &context, 8, 65'536);
+    const int result = rtlsdr_read_async(
+        handle->device,
+        iqCallback,
+        &context,
+        ASYNC_BUFFER_COUNT,
+        ASYNC_BUFFER_LENGTH
+    );
     return context.failed ? -1 : result;
 }
 

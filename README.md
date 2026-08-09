@@ -20,7 +20,7 @@ weak-signal decoders are native code, so the current APK is deliberately built f
 
 ## Decoder status
 
-| Mode | Status in 0.5.3 |
+| Mode | Status in 0.5.4 |
 | --- | --- |
 | FieldLink Medium/Wide | Protocol-compatible decoder core; live synchronizer under validation |
 | CW/Morse | Adaptive 3-track decoder with dynamic noise floor, 3–60 WPM, tone/sensitivity controls and confidence |
@@ -66,6 +66,8 @@ decoding the packet, while the full 3 kHz USB/LSB audio passband preserves all e
 The implementation opens the Android USB file descriptor directly. It does not use rtl_tcp, does not
 request Internet access, and does not record I/Q or audio. SDR settings are intentionally reset when
 the app process starts. The V4-compatible Android driver is pinned as source and compiled by CMake.
+FieldLink reception disables the hidden audio-spectrum FFT and uses 32 larger asynchronous USB
+buffers, providing about 1.7 seconds of I/Q reserve for decoder and Android scheduling peaks.
 
 ## Build
 
