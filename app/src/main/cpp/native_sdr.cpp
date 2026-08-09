@@ -6,7 +6,8 @@
 
 extern "C" {
 #include "rtl-sdr.h"
-#include "rtl-sdr-android.h"
+
+RTLSDR_API int rtlsdr_open2(rtlsdr_dev_t** out_dev, int fd, const char* device_path);
 }
 
 namespace {
